@@ -1,0 +1,84 @@
+import asyncio
+import aio_pika
+from loguru import logger
+from src.common.database import DatabaseManager
+from src.rabbitmq.consumers.contact_duplicate import ContactDuplicateConsumer
+from src.rabbitmq.rmq_connetcion import RMQConnectionManager
+from src.rabbitmq.rmq_publisher import RMQPublisher
+
+
+class RabbitMQManager:
+    """Класс для управления RabbitMQ: настройка очередей, запуск консьюмеров."""
+
+    def __init__(self, connection_url: str, db_manager: DatabaseManager):
+        self.connection_url = connection_url
+        self.connection_manager = RMQConnectionManager(connection_url)
+        self.db_manager = db_manager
+        self.rmq_publisher = RMQPublisher(connection_url)
+
+        # Список консьюмеров
+        self.consumers = []
+
+    async def setup_rabbitmq(self):
+        """Настройка всех очередей и Dead Letter Exchange (DLX)."""
+        async with self.connection_manager as connection:
+            channel = await connection.channel()
+
+            # Создаём DLX
+            dlx_exchange = await channel.declare_exchange(
+                "dlx_exchange_duplicate", type=aio_pika.ExchangeType.DIRECT, durable=True
+            )
+
+            # Определяем мёртвые очереди для каждой основной очереди
+            dead_letter_queues = {
+                "duplicate_contacts": "dead_letter_duplicate_contacts",
+                "duplicate_contacts_settings": "dead_letter_duplicate_contacts_settings",
+            }
+
+            # Создаем и связываем DLX
+            for queue_name, dlq_name in dead_letter_queues.items():
+                dead_letter_queue = await channel.declare_queue(dlq_name, durable=True)
+                await dead_letter_queue.bind(dlx_exchange, routing_key=dlq_name)
+
+            # Создаем основные очереди с DLX
+            for queue_name, dlq_name in dead_letter_queues.items():
+                await channel.declare_queue(
+                    queue_name,
+                    durable=True,
+                    arguments={
+                        "x-dead-letter-exchange": "dlx_exchange_duplicate",
+                        "x-dead-letter-routing-key": dlq_name,
+                        "x-message-ttl": 60000,  # TTL 60 секунд
+                        "x-max-length": 1000,  # Максимальная длина очереди
+                    },
+                )
+
+            logger.info("✅ RabbitMQ: все очереди и DLX настроены.")
+
+    async def start_all_consumers(self):
+        """Запускает все консьюмеры."""
+        await self.setup_rabbitmq()  # Создаём очереди перед запуском консьюмеров
+
+        logger.info("Запуск всех консьюмеров...")
+
+        # Создаем консьюмеров
+        contact_duplicates_consumer = ContactDuplicateConsumer(
+            queue_name="duplicate_contacts",
+            connection_url=self.connection_url,
+            rmq_publisher=self.rmq_publisher,
+            db_manager=self.db_manager,
+        )
+
+        contact_settings_consumer = ContactDuplicateConsumer(
+            queue_name="duplicate_contacts_settings",
+            connection_url=self.connection_url,
+            rmq_publisher=self.rmq_publisher,
+            db_manager=self.db_manager,
+        )
+
+        # Добавляем консьюмеров в список
+        self.consumers.append(contact_duplicates_consumer)
+        self.consumers.append(contact_settings_consumer)
+
+        # Запускаем всех консьюмеров асинхронно
+        await asyncio.gather(*(consumer.start() for consumer in self.consumers))
