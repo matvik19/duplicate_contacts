@@ -10,11 +10,17 @@ from src.rabbitmq.rmq_publisher import RMQPublisher
 
 MAX_RETRIES = 5
 
+
 class BaseConsumer(ABC):
-    def __init__(self, queue_name: str, connection_url: str, rmq_publisher: RMQPublisher, db_manager: DatabaseManager):
+    def __init__(
+        self,
+        queue_name: str,
+        connection_manager: RMQConnectionManager,
+        rmq_publisher: RMQPublisher,
+        db_manager: DatabaseManager,
+    ):
         self.queue_name = queue_name
-        self.connection_url = connection_url
-        self.connection_manager = RMQConnectionManager(connection_url)
+        self.connection_manager = connection_manager
         self.rmq_publisher = rmq_publisher
         self.db_manager = db_manager
 
@@ -59,7 +65,9 @@ class BaseConsumer(ABC):
                 logger.error("Достигнут лимит повторных попыток. Отправляем в DLX.")
                 await message.reject(requeue=False)
             else:
-                logger.warning(f"Попытка обработки не удалась. Републикация №{retry_count + 1}")
+                logger.warning(
+                    f"Попытка обработки не удалась. Републикация №{retry_count + 1}"
+                )
                 await self.rmq_publisher.republish_message(message, retry_count + 1)
                 await message.ack()
 

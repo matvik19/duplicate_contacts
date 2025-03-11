@@ -17,4 +17,5 @@ RMQ_HOST = os.environ.get("RMQ_HOST")
 RMQ_PORT = os.environ.get("RMQ_PORT")
 RMQ_VHOST = os.environ.get("RMQ_VHOST")
 
-CONNECTION_URL = f"amqp://{RMQ_USER}:{RMQ_PASSWORD}@{RMQ_HOST}:{RMQ_PORT}/{RMQ_VHOST}"
+CONNECTION_URL_RMQ = f"amqp://{RMQ_USER}:{RMQ_PASSWORD}@{RMQ_HOST}:{RMQ_PORT}/{RMQ_VHOST}"
+CONNECTION_URL_DB = f"postgresql+asyncpg://{DB_USER}:{DB_PASS}@{DB_HOST}:{DB_PORT}/{DB_NAME}"

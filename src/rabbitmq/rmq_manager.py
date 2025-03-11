@@ -2,21 +2,23 @@ import asyncio
 import aio_pika
 from loguru import logger
 from src.common.database import DatabaseManager
-from src.rabbitmq.consumers.contact_duplicate import ContactDuplicateConsumer
+from src.rabbitmq.consumers.contact_duplicate_consumer import ContactDuplicateConsumer
 from src.rabbitmq.rmq_connetcion import RMQConnectionManager
 from src.rabbitmq.rmq_publisher import RMQPublisher
 
 
-class RabbitMQManager:
+class RMQManager:
     """Класс для управления RabbitMQ: настройка очередей, запуск консьюмеров."""
 
-    def __init__(self, connection_url: str, db_manager: DatabaseManager):
-        self.connection_url = connection_url
-        self.connection_manager = RMQConnectionManager(connection_url)
+    def __init__(
+        self,
+        connection_manager: RMQConnectionManager,
+        db_manager: DatabaseManager,
+        rmq_publisher: RMQPublisher,
+    ):
+        self.connection_manager = connection_manager
         self.db_manager = db_manager
-        self.rmq_publisher = RMQPublisher(connection_url)
-
-        # Список консьюмеров
+        self.rmq_publisher = rmq_publisher
         self.consumers = []
 
     async def setup_rabbitmq(self):
@@ -26,7 +28,9 @@ class RabbitMQManager:
 
             # Создаём DLX
             dlx_exchange = await channel.declare_exchange(
-                "dlx_exchange_duplicate", type=aio_pika.ExchangeType.DIRECT, durable=True
+                "dlx_exchange_duplicate",
+                type=aio_pika.ExchangeType.DIRECT,
+                durable=True,
             )
 
             # Определяем мёртвые очереди для каждой основной очереди
@@ -64,14 +68,14 @@ class RabbitMQManager:
         # Создаем консьюмеров
         contact_duplicates_consumer = ContactDuplicateConsumer(
             queue_name="duplicate_contacts",
-            connection_url=self.connection_url,
+            connection_manager=self.connection_manager,
             rmq_publisher=self.rmq_publisher,
             db_manager=self.db_manager,
         )
 
         contact_settings_consumer = ContactDuplicateConsumer(
             queue_name="duplicate_contacts_settings",
-            connection_url=self.connection_url,
+            connection_manager=self.connection_manager,
             rmq_publisher=self.rmq_publisher,
             db_manager=self.db_manager,
         )

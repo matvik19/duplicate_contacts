@@ -7,15 +7,16 @@ import asyncpg
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
-from src.common.config import DB_HOST, DB_NAME, DB_PASS, DB_PORT, DB_USER
+from src.common.config import DB_HOST, DB_NAME, DB_PASS, DB_PORT, DB_USER, CONNECTION_URL_DB
+
 Base = declarative_base()
 
 class DatabaseManager:
-    def __init__(self):
+    def __init__(self, connection_url: str):
         """Инициализируем параметры подключения и движок SQLAlchemy."""
-        self.database_url = f"postgresql+asyncpg://{DB_USER}:{DB_PASS}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+        self.connection_url = connection_url
         self.engine = create_async_engine(
-            self.database_url,
+            self.connection_url,
             pool_size=30,
             max_overflow=25,
             echo=False,
