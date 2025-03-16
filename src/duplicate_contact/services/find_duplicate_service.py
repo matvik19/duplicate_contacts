@@ -8,7 +8,7 @@ class FindDuplicateService:
         self.amocrm_service = amocrm_service
 
     async def find_duplicates(
-        self, subdomain, access_token, merge_fields: list
+        self, subdomain: str, access_token: str, merge_fields: list
     ) -> list:
         """Ищет дубли контактов на основе указанных полей"""
 

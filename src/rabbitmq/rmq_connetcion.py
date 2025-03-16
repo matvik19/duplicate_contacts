@@ -13,7 +13,9 @@ class RMQConnectionManager:
         """Создаёт и возвращает соединение с RabbitMQ."""
         if not self.connection or self.connection.is_closed:
             try:
-                self.connection = await aio_pika.connect_robust(self.connection_url, timeout=10)
+                self.connection = await aio_pika.connect_robust(
+                    self.connection_url, timeout=10
+                )
                 logger.info("Подключение к RabbitMQ успешно установлено.")
             except Exception as e:
                 logger.error(f"Ошибка подключения к RabbitMQ: {e}")

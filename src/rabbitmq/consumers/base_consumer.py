@@ -28,14 +28,14 @@ class BaseConsumer(ABC):
         """Запускает консьюмера"""
         while True:
             try:
-                async with self.connection_manager as connection:
-                    channel = await connection.channel()
-                    await channel.set_qos(prefetch_count=10)
-                    queue = await channel.get_queue(self.queue_name)
+                connection = await self.connection_manager.connect()
+                channel = await connection.channel()
+                await channel.set_qos(prefetch_count=10)
+                queue = await channel.get_queue(self.queue_name)
 
-                    async with queue.iterator() as queue_iter:
-                        async for message in queue_iter:
-                            await self.process_message(message)
+                async with queue.iterator() as queue_iter:
+                    async for message in queue_iter:
+                        await self.process_message(message)
             except asyncio.CancelledError:
                 logger.warning(f"Консьюмер {self.queue_name} отменен.")
                 break

@@ -2,6 +2,7 @@ import asyncio
 import aio_pika
 from loguru import logger
 from src.common.database import DatabaseManager
+from src.rabbitmq.consumers.base_consumer import MAX_RETRIES
 from src.rabbitmq.consumers.contact_duplicate_consumer import ContactDuplicateConsumer
 from src.rabbitmq.rmq_connetcion import RMQConnectionManager
 from src.rabbitmq.rmq_publisher import RMQPublisher
@@ -55,6 +56,7 @@ class RMQManager:
                         "x-dead-letter-routing-key": dlq_name,
                         "x-message-ttl": 60000,  # TTL 60 секунд
                         "x-max-length": 1000,  # Максимальная длина очереди
+                        "x-max-retry": MAX_RETRIES,
                     },
                 )
 

@@ -32,8 +32,11 @@ async def lifespan(app: FastAPI):
         consumers_task.cancel()
         await asyncio.gather(consumers_task, return_exceptions=True)
 
-        logger.info("🔌 Закрытие соединения с БД...")
+        logger.info("Закрытие соединения с БД...")
         await db_manager.close()
+
+        logger.info("Закрытие соединения с RabbitMQ...")
+        await rabbitmq_manager.connection_manager.close()
 
         logger.info("Все ресурсы успешно освобождены.")
 

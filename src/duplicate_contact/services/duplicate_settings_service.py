@@ -102,7 +102,6 @@ class DuplicateSettingsService:
                     await self.duplicate_repo.insert_exclusion_fields(
                         session, block_id, block["exclusion_fields"]
                     )
-
             await session.commit()
             return {"id": new_settings_id, "subdomain": data.subdomain}
 
