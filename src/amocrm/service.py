@@ -1,4 +1,6 @@
 import asyncio
+
+import aiohttp
 from aiohttp import ClientSession
 from loguru import logger
 from fastapi import HTTPException
@@ -49,7 +51,7 @@ class AmocrmService:
             "GET",
             subdomain,
             access_token,
-            "/api/v4/contacts",
+            "/api/v4/contacts?with=leads",
             params={"page": page, "limit": limit},
         )
         contacts = first_response.get("_embedded", {}).get("contacts", [])
@@ -119,23 +121,6 @@ class AmocrmService:
             "GET", subdomain, access_token, f"/api/v4/leads/{lead_id}?with=contacts"
         )
 
-    async def merge_leads(
-        self, subdomain: str, access_token: str, result_element: dict
-    ) -> Any:
-        """Объединение сделок в amoCRM."""
-        headers = {
-            "Host": f"{subdomain}.amocrm.ru",
-            "Content-Type": "application/x-www-form-urlencoded",
-            "Authorization": f"Bearer {access_token}",
-        }
-        return await self.request(
-            "POST",
-            subdomain,
-            access_token,
-            "/ajax/merge/leads/save",
-            json=result_element,
-        )
-
     async def add_tag_to_lead(
         self,
         subdomain: str,
@@ -159,3 +144,51 @@ class AmocrmService:
         return await self.request(
             "PATCH", subdomain, access_token, f"/api/v4/leads/{lead_id}", json=payload
         )
+
+    @staticmethod
+    async def merge_contacts(
+        client_session: ClientSession,
+        subdomain: str,
+        access_token: str,
+        result_element: dict,
+    ) -> Dict[str, Any]:
+        """
+        Отправляет запрос на объединение контактов через API amoCRM.
+        :param client_session: aiohttp ClientSession для отправки запроса.
+        :param subdomain: поддомен amoCRM.
+        :param access_token: access token для авторизации.
+        :param result_element: тело запроса, сформированное методом prepare_merge_data.
+        :return: ответ API в виде словаря.
+        """
+        url = f"https://{subdomain}.amocrm.ru/ajax/merge/contacts/save"
+        headers = {
+            "Host": f"{subdomain}.amocrm.ru",
+            "Content-Type": "application/x-www-form-urlencoded",
+            "X-Requested-With": "XMLHttpRequest",
+            "Authorization": access_token,
+        }
+
+        try:
+            async with client_session.post(
+                url, data=result_element, headers=headers
+            ) as response:
+                if response.status != 202:
+                    error_message = await response.text()
+                    raise HTTPException(
+                        status_code=response.status,
+                        detail=f"Failed to merge contacts: {error_message}",
+                    )
+                result = await response.json()
+                return result
+        except aiohttp.ClientError as client_err:
+            logger.error(f"Network error during merging contacts: {client_err}")
+            raise HTTPException(
+                status_code=502,
+                detail=f"Network error during merging contacts: {client_err}",
+            )
+        except Exception as e:
+            logger.error(f"Unexpected error during merging contacts: {e}")
+            raise HTTPException(
+                status_code=500,
+                detail=f"Unexpected error during merging contacts: {e}",
+            )

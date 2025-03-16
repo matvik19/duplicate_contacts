@@ -1,3 +1,5 @@
+# contact_duplicate_repository.py
+
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlalchemy import select, insert, delete
@@ -29,10 +31,9 @@ class ContactDuplicateRepository:
             .where(self.settings.subdomain == subdomain)
             .options(
                 selectinload(self.settings.priority_fields),
-                selectinload(self.settings.blocks).selectinload(self.block.fields),
-                selectinload(self.settings.blocks).selectinload(
-                    self.block.exclusion_fields
-                ),
+                selectinload(self.settings.blocks)
+                .selectinload(self.block.fields)
+                .selectinload(self.block_field.exclusion_values),
             )
         )
         result = await session.execute(stmt)
@@ -85,46 +86,64 @@ class ContactDuplicateRepository:
     async def insert_blocks(
         self, session: AsyncSession, settings_id: int, blocks: list[dict]
     ) -> dict[int, int]:
-        """Вставляет записи в `blocks` и возвращает соответствие block_id -> DB id."""
+        """Вставляет записи в `blocks` с сохранением block_id из клиента и возвращает соответствие: client block_id → db id."""
         if not blocks:
             return {}
 
         stmt = (
             insert(self.block)
-            .values([{"settings_id": settings_id} for _ in blocks])
-            .returning(self.block.id)
+            .values(
+                [
+                    {"settings_id": settings_id, "block_id": block["block_id"]}
+                    for block in blocks
+                ]
+            )
+            .returning(self.block.id, self.block.block_id)
         )
         result = await session.execute(stmt)
-        block_ids = result.scalars().all()
-
-        return {i: block_ids[i] for i in range(len(blocks))}
+        rows = result.all()
+        return {row.block_id: row.id for row in rows}
 
     async def insert_block_fields(
         self, session: AsyncSession, block_id: int, fields: list[dict]
-    ) -> None:
-        """Вставляет записи в `block_fields`."""
+    ) -> dict[str, int]:
+        """Вставляет записи в `block_fields` и возвращает сопоставление: field_name → db id."""
         if not fields:
-            return
+            return {}
 
-        stmt = insert(self.block_field).values(
-            [
-                {"field_name": field["field_name"], "block_id": block_id}
-                for field in fields
-            ]
+        stmt = (
+            insert(self.block_field)
+            .values(
+                [
+                    {"field_name": field["field_name"], "block_id": block_id}
+                    for field in fields
+                ]
+            )
+            .returning(self.block_field.id, self.block_field.field_name)
         )
-        await session.execute(stmt)
+        result = await session.execute(stmt)
+        rows = result.all()
+        return {row.field_name: row.id for row in rows}
 
-    async def insert_exclusion_fields(
-        self, session: AsyncSession, block_id: int, fields: list[dict]
+    async def insert_exclusion_values(
+        self,
+        session: AsyncSession,
+        block_field_id: int,
+        field_name: str,
+        exclusion_fields: list[dict],
     ) -> None:
-        """Вставляет записи в `exclusion_fields`."""
-        if not fields:
+        """Вставляет записи в `exclusion_fields` для конкретного поля блока."""
+        if not exclusion_fields:
             return
 
         stmt = insert(self.exclusion_fields).values(
             [
-                {"field_name": field["field_name"], "block_id": block_id}
-                for field in fields
+                {
+                    "value": ex["value"],
+                    "field_name": field_name,
+                    "block_field_id": block_field_id,
+                }
+                for ex in exclusion_fields
             ]
         )
         await session.execute(stmt)

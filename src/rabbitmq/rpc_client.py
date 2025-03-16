@@ -5,8 +5,6 @@ import uuid
 from loguru import logger
 from fastapi import HTTPException
 import async_timeout
-from websockets import connect
-
 from src.rabbitmq.rmq_connetcion import RMQConnectionManager
 
 

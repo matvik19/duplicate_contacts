@@ -1,8 +1,8 @@
 """Initial migration for duplicate contacts
 
-Revision ID: 233cc33a5cae
+Revision ID: 59a2f85daa8d
 Revises: 
-Create Date: 2025-03-16 12:54:27.995259
+Create Date: 2025-03-16 17:37:02.061306
 
 """
 from typing import Sequence, Union
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = '233cc33a5cae'
+revision: str = '59a2f85daa8d'
 down_revision: Union[str, None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -31,9 +31,11 @@ def upgrade() -> None:
     )
     op.create_table('blocks',
     sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('block_id', sa.Integer(), nullable=False),
     sa.Column('settings_id', sa.Integer(), nullable=False),
     sa.ForeignKeyConstraint(['settings_id'], ['settings.id'], ondelete='CASCADE'),
-    sa.PrimaryKeyConstraint('id')
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('block_id', 'settings_id', name='uq_block_blockid_settings')
     )
     op.create_table('priority_fields',
     sa.Column('id', sa.Integer(), nullable=False),
@@ -53,9 +55,10 @@ def upgrade() -> None:
     )
     op.create_table('exclusion_fields',
     sa.Column('id', sa.Integer(), nullable=False),
+    sa.Column('value', sa.String(length=128), nullable=False),
     sa.Column('field_name', sa.String(length=128), nullable=False),
-    sa.Column('block_id', sa.Integer(), nullable=False),
-    sa.ForeignKeyConstraint(['block_id'], ['blocks.id'], ondelete='CASCADE'),
+    sa.Column('block_field_id', sa.Integer(), nullable=False),
+    sa.ForeignKeyConstraint(['block_field_id'], ['block_fields.id'], ondelete='CASCADE'),
     sa.PrimaryKeyConstraint('id')
     )
     # ### end Alembic commands ###

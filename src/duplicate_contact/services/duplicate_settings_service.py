@@ -30,18 +30,22 @@ class DuplicateSettingsService:
                     {"field_name": field.field_name, "action": field.action}
                     for field in settings.priority_fields
                 ],
-                duplicate_blocks=[
+                blocks=[
                     {
-                        "id": block.id,
+                        "block_id": block.block_id,
                         "fields": [
-                            {"field_name": field.field_name} for field in block.fields
-                        ],
-                        "exclusion_fields": [
-                            {"field_name": ex_field.field_name}
-                            for ex_field in block.exclusion_fields
+                            {
+                                "field_name": bf.field_name,
+                                "exclusion_fields": (
+                                    [{"value": ex.value} for ex in bf.exclusion_values]
+                                    if bf.exclusion_values
+                                    else []
+                                ),
+                            }
+                            for bf in block.fields
                         ],
                     }
-                    for block in settings.duplicate_blocks
+                    for block in settings.blocks
                 ],
             )
 
@@ -75,33 +79,40 @@ class DuplicateSettingsService:
                     session, new_settings_id, data.priority_fields
                 )
 
-            # Вставляем блоки дублей и получаем их реальные ID из БД
+            # Вставляем блоки дублей с учётом нового поля block_id
             block_mapping = {}
-            if data.duplicate_blocks:
+            if data.blocks:
                 block_mapping = await self.duplicate_repo.insert_blocks(
-                    session, new_settings_id, data.duplicate_blocks
+                    session, new_settings_id, data.blocks
                 )
 
-            for index, block in enumerate(data.duplicate_blocks):
-                block_id = block_mapping.get(
-                    index
-                )  # Используем индекс, а не `block.get("id")`
-
-                if not block_id:
-                    logger.warning(f"Пропущен блок без block_id: {block}")
+            # Обрабатываем каждый блок: вставляем поля и их исключения
+            for block in data.blocks:
+                db_block_id = block_mapping.get(block["block_id"])
+                if not db_block_id:
+                    logger.warning(f"Пропущен блок без db_block_id: {block}")
                     continue
 
-                # Вставляем поля блока
                 if "fields" in block and block["fields"]:
-                    await self.duplicate_repo.insert_block_fields(
-                        session, block_id, block["fields"]
+                    # Вставляем поля блока и получаем mapping: field_name -> id
+                    field_mapping = await self.duplicate_repo.insert_block_fields(
+                        session, db_block_id, block["fields"]
                     )
-
-                # Вставляем исключённые поля
-                if "exclusion_fields" in block and block["exclusion_fields"]:
-                    await self.duplicate_repo.insert_exclusion_fields(
-                        session, block_id, block["exclusion_fields"]
-                    )
+                    # Для каждого поля, если есть исключения – вставляем их
+                    for field in block["fields"]:
+                        if "exclusion_fields" in field and field["exclusion_fields"]:
+                            db_field_id = field_mapping.get(field["field_name"])
+                            if not db_field_id:
+                                logger.warning(
+                                    f"Не найдено поле для исключений: {field}"
+                                )
+                                continue
+                            await self.duplicate_repo.insert_exclusion_values(
+                                session,
+                                db_field_id,
+                                field["field_name"],
+                                field["exclusion_fields"],
+                            )
             await session.commit()
             return {"id": new_settings_id, "subdomain": data.subdomain}
 

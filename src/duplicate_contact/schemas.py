@@ -9,4 +9,4 @@ class ContactDuplicateSettingsSchema(BaseSchema):
     blocked_creation: bool = False
     duplicate_start: bool = False
     priority_fields: list = []
-    duplicate_blocks: list = []
+    blocks: list = []

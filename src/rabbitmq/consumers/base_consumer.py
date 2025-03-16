@@ -8,7 +8,7 @@ from src.common.database import DatabaseManager
 from src.rabbitmq.rmq_connetcion import RMQConnectionManager
 from src.rabbitmq.rmq_publisher import RMQPublisher
 
-MAX_RETRIES = 5
+MAX_RETRIES = 1
 
 
 class BaseConsumer(ABC):

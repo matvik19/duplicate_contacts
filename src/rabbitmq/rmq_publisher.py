@@ -1,7 +1,5 @@
 import aio_pika
 from loguru import logger
-from websockets import connect
-
 from src.rabbitmq.rmq_connetcion import RMQConnectionManager
 
 

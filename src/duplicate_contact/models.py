@@ -54,34 +54,41 @@ class Block(Base):
     __tablename__ = "blocks"
 
     id: Mapped[int] = mapped_column(primary_key=True, nullable=False)
+    block_id: Mapped[int] = mapped_column(nullable=False)
     settings_id: Mapped[int] = mapped_column(
         sa.ForeignKey("settings.id", ondelete="CASCADE"), nullable=False
     )
 
     settings: Mapped["Settings"] = relationship("Settings", back_populates="blocks")
 
+    # Отношение к полям блока; через поля будут доступны исключения
     fields: Mapped[list["BlockField"]] = relationship(
         "BlockField", back_populates="block", cascade="all, delete-orphan"
     )
 
-    exclusion_fields: Mapped[list["ExclusionField"]] = relationship(
-        "ExclusionField", back_populates="block", cascade="all, delete-orphan"
+    __table_args__ = (
+        sa.UniqueConstraint(
+            "block_id", "settings_id", name="uq_block_blockid_settings"
+        ),
     )
 
 
 class BlockField(Base):
-    """Поля в блоках дублей."""
+    """Поля в блоках настроек дублей с их исключениями."""
 
     __tablename__ = "block_fields"
 
     id: Mapped[int] = mapped_column(primary_key=True, nullable=False)
     field_name: Mapped[str] = mapped_column(sa.String(128), nullable=False)
-
     block_id: Mapped[int] = mapped_column(
         sa.ForeignKey("blocks.id", ondelete="CASCADE"), nullable=False
     )
-
     block: Mapped["Block"] = relationship("Block", back_populates="fields")
+
+    # Связь с таблицей исключений для конкретного поля
+    exclusion_values: Mapped[list["ExclusionField"]] = relationship(
+        "ExclusionField", back_populates="block_field", cascade="all, delete-orphan"
+    )
 
 
 class ExclusionField(Base):
@@ -90,10 +97,12 @@ class ExclusionField(Base):
     __tablename__ = "exclusion_fields"
 
     id: Mapped[int] = mapped_column(primary_key=True, nullable=False)
+    value: Mapped[str] = mapped_column(sa.String(128), nullable=False)
     field_name: Mapped[str] = mapped_column(sa.String(128), nullable=False)
 
-    block_id: Mapped[int] = mapped_column(
-        sa.ForeignKey("blocks.id", ondelete="CASCADE"), nullable=False
+    block_field_id: Mapped[int] = mapped_column(
+        sa.ForeignKey("block_fields.id", ondelete="CASCADE"), nullable=False
     )
-
-    block: Mapped["Block"] = relationship("Block", back_populates="exclusion_fields")
+    block_field: Mapped["BlockField"] = relationship(
+        "BlockField", back_populates="exclusion_values"
+    )
