@@ -4,16 +4,11 @@ import uvicorn
 from fastapi import FastAPI
 from starlette.middleware.cors import CORSMiddleware
 from loguru import logger
-
-from src.common.config import CONNECTION_URL_RMQ
-from src.common.database import DatabaseManager
-from src.common.log_config import setup_logging
 from src.containers import Container
-from src.rabbitmq.rmq_manager import RMQManager
 
 container = Container()
 # Можно передать значения, которые потом будем использовать при создании объектов
-container.config.from_dict({})
+# container.config.from_dict({})
 
 db_manager = container.db_manager()
 rabbitmq_manager = container.rabbitmq_manager()
@@ -22,7 +17,7 @@ rabbitmq_manager = container.rabbitmq_manager()
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Управление жизненным циклом FastAPI."""
-    setup_logging()
+    # setup_logging()
     await db_manager.wait_for_db()
     await db_manager.run_migrations()
 

@@ -13,7 +13,7 @@ class ContactDuplicateConsumer(BaseConsumer):
         connection_manager,
         rmq_publisher,
         db_manager,
-        duplicate_service: ContactDuplicateService,
+        duplicate_service,
     ):
         super().__init__(queue_name, connection_manager, rmq_publisher, db_manager)
         self.duplicate_service = duplicate_service  # ✅ Просто сохраняем сервис
@@ -22,7 +22,7 @@ class ContactDuplicateConsumer(BaseConsumer):
         """Обрабатывает сообщение с дублями контактов."""
         try:
             logger.info(
-                f"📩 Получено сообщение о дублях контактов: {json.dumps(data, indent=2)}"
+                f"Получено сообщение о дублях контактов: {json.dumps(data, indent=2)}"
             )
 
             # ✅ Теперь просто вызываем сервис дублей

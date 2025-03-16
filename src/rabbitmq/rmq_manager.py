@@ -15,11 +15,12 @@ class RMQManager:
         connection_manager: RMQConnectionManager,
         db_manager: DatabaseManager,
         rmq_publisher: RMQPublisher,
+        consumers: list,
     ):
         self.connection_manager = connection_manager
         self.db_manager = db_manager
         self.rmq_publisher = rmq_publisher
-        self.consumers = []
+        self.consumers = consumers
 
     async def setup_rabbitmq(self):
         """Настройка всех очередей и Dead Letter Exchange (DLX)."""
@@ -64,25 +65,6 @@ class RMQManager:
         await self.setup_rabbitmq()  # Создаём очереди перед запуском консьюмеров
 
         logger.info("Запуск всех консьюмеров...")
-
-        # Создаем консьюмеров
-        contact_duplicates_consumer = ContactDuplicateConsumer(
-            queue_name="duplicate_contacts",
-            connection_manager=self.connection_manager,
-            rmq_publisher=self.rmq_publisher,
-            db_manager=self.db_manager,
-        )
-
-        contact_settings_consumer = ContactDuplicateConsumer(
-            queue_name="duplicate_contacts_settings",
-            connection_manager=self.connection_manager,
-            rmq_publisher=self.rmq_publisher,
-            db_manager=self.db_manager,
-        )
-
-        # Добавляем консьюмеров в список
-        self.consumers.append(contact_duplicates_consumer)
-        self.consumers.append(contact_settings_consumer)
 
         # Запускаем всех консьюмеров асинхронно
         await asyncio.gather(*(consumer.start() for consumer in self.consumers))
