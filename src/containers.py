@@ -2,37 +2,30 @@ from dependency_injector import containers, providers
 import aiohttp
 
 from src.amocrm.service import AmocrmService
-from src.common.config import CONNECTION_URL_RMQ, CONNECTION_URL_DB
+from src.common.config import CONNECTION_URL_DB, CONNECTION_URL_RMQ
 from src.common.database import DatabaseManager
 from src.common.token_service import TokenService
 from src.duplicate_contact.repository import ContactDuplicateRepository
-from src.duplicate_contact.services.duplicate_settings_service import (
-    DuplicateSettingsService,
-)
-from src.duplicate_contact.services.find_duplicate_service import FindDuplicateService
-from src.duplicate_contact.services.merge_duplicate_service import MergeContact
-from src.rabbitmq.consumers.contact_duplicate_consumer import ContactDuplicateConsumer
-from src.rabbitmq.consumers.contact_duplicate_settings import (
+from src.duplicate_contact.services.duplicate_settings import DuplicateSettingsService
+from src.duplicate_contact.services.find_duplicate import FindDuplicateService
+from src.duplicate_contact.services.merge_duplicate import MergeAllContacts
+from src.duplicate_contact.services.merge_single_contact import MergeOneContact
+from src.rabbitmq.consumers.merge_all_contacts_consumer import MergeAllContactsConsumer
+from src.rabbitmq.consumers.merge_one_contact_consumer import MergeOneContactConsumer
+from src.rabbitmq.consumers.save_settings import (
     ContactDuplicateSettingsConsumer,
 )
-from src.rabbitmq.rmq_connetcion import RMQConnectionManager
-from src.rabbitmq.rmq_manager import RMQManager
-from src.rabbitmq.rmq_publisher import RMQPublisher
+from src.rabbitmq.connection import RMQConnectionManager
+from src.rabbitmq.manager import RMQManager
+from src.rabbitmq.publisher import RMQPublisher
 from src.rabbitmq.rpc_client import RPCClient
 
 
-class Container(containers.DeclarativeContainer):
-    """DI-контейнер для зависимостей."""
-
-    # Создаем единственный экземпляр ClientSession для aiohttp
-    client_session = providers.Singleton(
-        lambda: aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=False))
-    )
-
-    # База данных
+class DatabaseContainer(containers.DeclarativeContainer):
     db_manager = providers.Singleton(DatabaseManager, connection_url=CONNECTION_URL_DB)
 
-    # RabbitMQ
+
+class RabbitMQContainer(containers.DeclarativeContainer):
     connection_manager = providers.Singleton(
         RMQConnectionManager, connection_url=CONNECTION_URL_RMQ
     )
@@ -41,61 +34,89 @@ class Container(containers.DeclarativeContainer):
     )
     rpc_client = providers.Singleton(RPCClient, connection_manager=connection_manager)
 
-    token_service = providers.Singleton(TokenService, rpc_client=rpc_client)
 
-    # Репозиторий (сессия передается в методы)
+class ServiceContainer(containers.DeclarativeContainer):
+    client_session = providers.Singleton(
+        lambda: aiohttp.ClientSession(connector=aiohttp.TCPConnector(ssl=False))
+    )
+    amocrm_service = providers.Factory(AmocrmService, client_session=client_session)
+    token_service = providers.Singleton(
+        TokenService, rpc_client=RabbitMQContainer.rpc_client
+    )
+
     duplicate_repo = providers.Factory(ContactDuplicateRepository)
-
-    # Сервис настроек дублей
     duplicate_settings_service = providers.Factory(
         DuplicateSettingsService, duplicate_repo=duplicate_repo
     )
-
-    # Сервисы для работы с дубликатами
-    amocrm_service = providers.Factory(AmocrmService, client_session=client_session)
     find_duplicate_service = providers.Factory(
-        FindDuplicateService,
-        amocrm_service=amocrm_service,
+        FindDuplicateService, amocrm_service=amocrm_service
     )
-    merge_duplicate_service = providers.Factory(
-        MergeContact,
+    merge_all_contacts = providers.Factory(
+        MergeAllContacts,
         find_duplicate_service=find_duplicate_service,
         amocrm_service=amocrm_service,
     )
 
-    # Консьюмер для настроек дублей
-    contact_duplicates_settings_consumer = providers.Singleton(
+    merge_one_contact = providers.Factory(
+        MergeOneContact,
+        find_duplicate_service=find_duplicate_service,
+        amocrm_service=amocrm_service,
+    )
+
+
+class ConsumerContainer(containers.DeclarativeContainer):
+    connection_manager = RabbitMQContainer.connection_manager
+    rmq_publisher = RabbitMQContainer.rmq_publisher
+    db_manager = DatabaseContainer.db_manager
+    duplicate_settings_service = ServiceContainer.duplicate_settings_service
+    token_service = ServiceContainer.token_service
+
+    save_contact_duplicates_settings_consumer = providers.Singleton(
         ContactDuplicateSettingsConsumer,
-        queue_name="duplicate_contacts_settings",
+        queue_name="save_contact_duplicates_settings",
         connection_manager=connection_manager,
         rmq_publisher=rmq_publisher,
         db_manager=db_manager,
         duplicate_settings_service=duplicate_settings_service,
     )
-
-    # Консьюмер для слияния дублей
-    contact_duplicates_consumer = providers.Singleton(
-        ContactDuplicateConsumer,
-        queue_name="duplicate_contacts",
+    merge_duplicates_all_contacts_consumer = providers.Singleton(
+        MergeAllContactsConsumer,
+        queue_name="merge_duplicates_all_contacts",
         connection_manager=connection_manager,
         rmq_publisher=rmq_publisher,
         db_manager=db_manager,
-        duplicate_service=merge_duplicate_service,
+        duplicate_service=ServiceContainer.merge_all_contacts,
         token_service=token_service,
         duplicate_settings_service=duplicate_settings_service,
     )
-
-    # Собираем всех консьюмеров в один список
+    merge_duplicates_one_contact_consumer = providers.Singleton(
+        MergeOneContactConsumer,
+        queue_name="merge_duplicates_one_contact",
+        connection_manager=connection_manager,
+        rmq_publisher=rmq_publisher,
+        db_manager=db_manager,
+        duplicate_service=ServiceContainer.merge_one_contact,
+        token_service=token_service,
+        duplicate_settings_service=duplicate_settings_service,
+    )
     consumers = providers.List(
-        contact_duplicates_settings_consumer,
-        contact_duplicates_consumer,
+        save_contact_duplicates_settings_consumer,
+        merge_duplicates_all_contacts_consumer,
+        merge_duplicates_one_contact_consumer,
     )
 
-    # Менеджер RabbitMQ, который управляет очередями и запускает консьюмеры
+
+class ApplicationContainer(containers.DeclarativeContainer):
+    config = providers.Configuration()
+    database = providers.Container(DatabaseContainer)
+    rabbitmq = providers.Container(RabbitMQContainer)
+    services = providers.Container(ServiceContainer)
+    consumers = providers.Container(ConsumerContainer)
+
     rabbitmq_manager = providers.Singleton(
         RMQManager,
-        connection_manager=connection_manager,
-        db_manager=db_manager,
-        rmq_publisher=rmq_publisher,
-        consumers=consumers,
+        connection_manager=rabbitmq.connection_manager,
+        db_manager=database.db_manager,
+        rmq_publisher=rabbitmq.rmq_publisher,
+        consumers=consumers.consumers,
     )

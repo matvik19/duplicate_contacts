@@ -3,7 +3,7 @@ from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.duplicate_contact.schemas import ContactDuplicateSettingsSchema
-from src.duplicate_contact.services.duplicate_settings_service import (
+from src.duplicate_contact.services.duplicate_settings import (
     DuplicateSettingsService,
 )
 from src.rabbitmq.consumers.base_consumer import BaseConsumer
@@ -38,6 +38,5 @@ class ContactDuplicateSettingsConsumer(BaseConsumer):
 
             logger.info("✅ Дубли контактов успешно обработаны.")
         except Exception as e:
-            await session.rollback()  # Откат транзакции при ошибке
             logger.error(f"❌ Ошибка обработки дублей контактов: {e}")
             raise

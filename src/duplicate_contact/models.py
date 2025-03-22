@@ -14,7 +14,7 @@ class Settings(Base):
     blocked_creation: Mapped[bool] = mapped_column(
         sa.Boolean, default=False, nullable=False
     )
-    duplicate_start: Mapped[bool] = mapped_column(
+    merge_is_active: Mapped[bool] = mapped_column(
         sa.Boolean, default=False, nullable=False
     )
 

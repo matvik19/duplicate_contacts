@@ -1,6 +1,6 @@
 import aio_pika
 from loguru import logger
-from src.rabbitmq.rmq_connetcion import RMQConnectionManager
+from src.rabbitmq.connection import RMQConnectionManager
 
 
 class RMQPublisher:

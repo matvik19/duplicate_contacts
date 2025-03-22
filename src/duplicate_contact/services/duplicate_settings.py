@@ -25,7 +25,7 @@ class DuplicateSettingsService:
                 subdomain=settings.subdomain,
                 merge_all=settings.merge_all,
                 blocked_creation=settings.blocked_creation,
-                duplicate_start=settings.duplicate_start,
+                merge_is_active=settings.merge_is_active,
                 priority_fields=[
                     {"field_name": field.field_name, "action": field.action}
                     for field in settings.priority_fields

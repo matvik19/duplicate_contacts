@@ -7,6 +7,6 @@ class ContactDuplicateSettingsSchema(BaseSchema):
     subdomain: str
     merge_all: bool = True
     blocked_creation: bool = False
-    duplicate_start: bool = False
+    merge_is_active: bool = False
     priority_fields: list = []
     blocks: list = []

@@ -5,8 +5,8 @@ from abc import ABC, abstractmethod
 from loguru import logger
 
 from src.common.database import DatabaseManager
-from src.rabbitmq.rmq_connetcion import RMQConnectionManager
-from src.rabbitmq.rmq_publisher import RMQPublisher
+from src.rabbitmq.connection import RMQConnectionManager
+from src.rabbitmq.publisher import RMQPublisher
 
 MAX_RETRIES = 1
 

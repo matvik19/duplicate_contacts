@@ -57,7 +57,7 @@ class ContactDuplicateRepository:
                 subdomain=data.subdomain,
                 merge_all=data.merge_all,
                 blocked_creation=data.blocked_creation,
-                duplicate_start=data.duplicate_start,
+                merge_is_active=data.merge_is_active,
             )
             .returning(self.settings.id)
         )

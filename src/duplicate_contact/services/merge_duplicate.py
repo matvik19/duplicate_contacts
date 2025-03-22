@@ -1,20 +1,16 @@
 from loguru import logger
 from src.amocrm.service import AmocrmService
 from src.duplicate_contact.schemas import ContactDuplicateSettingsSchema
-from src.duplicate_contact.services.find_duplicate_service import FindDuplicateService
-from src.duplicate_contact.utils import prepare_merge_data
+from src.duplicate_contact.services.find_duplicate import FindDuplicateService
+from src.duplicate_contact.utils.prepare_merge_data import prepare_merge_data
 
 
-class MergeContact:
-    """
-    Сервис для объединения дублей контактов.
-    """
-
+class MergeAllContacts:
     def __init__(
         self,
         find_duplicate_service: FindDuplicateService,
         amocrm_service: AmocrmService,
-    ) -> None:
+    ):
         self.find_duplicate_service = find_duplicate_service
         self.amocrm_service = amocrm_service
 
@@ -39,7 +35,6 @@ class MergeContact:
             logger.info("Дубли не найдены.")
             return []
 
-        results = []
         for group in duplicate_groups:
             if len(group) < 2:
                 continue
@@ -51,13 +46,12 @@ class MergeContact:
             logger.info(f"Подготовленный payload для слияния: {payload}")
 
             try:
-                response = await self.amocrm_service.merge_contacts(
+                await self.amocrm_service.merge_contacts(
                     self.amocrm_service.client_session,
                     duplicate_settings.subdomain,
                     access_token,
                     payload,
                 )
-                results.append(response)
                 logger.info(
                     f"Слияние успешно для контактов: {[c['id'] for c in group]}"
                 )
@@ -66,5 +60,3 @@ class MergeContact:
                     f"Ошибка слияния для группы {[c['id'] for c in group]}: {e}"
                 )
                 continue
-
-        return results

@@ -2,8 +2,8 @@ import asyncio
 import aio_pika
 from loguru import logger
 from src.common.database import DatabaseManager
-from src.rabbitmq.rmq_connetcion import RMQConnectionManager
-from src.rabbitmq.rmq_publisher import RMQPublisher
+from src.rabbitmq.connection import RMQConnectionManager
+from src.rabbitmq.publisher import RMQPublisher
 
 
 class RMQManager:
@@ -35,8 +35,9 @@ class RMQManager:
 
             # Определяем мёртвые очереди для каждой основной очереди
             dead_letter_queues = {
-                "duplicate_contacts": "dead_letter_duplicate_contacts",
-                "duplicate_contacts_settings": "dead_letter_duplicate_contacts_settings",
+                "merge_duplicates_all_contacts": "dead_letter_merge_duplicates_all_contacts",
+                "save_contact_duplicates_settings": "dead_letter_save_contact_duplicates_settings",
+                "merge_duplicates_one_contact": "dead_letter_merge_duplicates_one_contact",
             }
 
             # Создаем и связываем DLX

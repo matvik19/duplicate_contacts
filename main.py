@@ -4,13 +4,14 @@ import uvicorn
 from fastapi import FastAPI
 from starlette.middleware.cors import CORSMiddleware
 from loguru import logger
-from src.containers import Container
 
-container = Container()
+from src.containers import ApplicationContainer
+
+container = ApplicationContainer()
 # Можно передать значения, которые потом будем использовать при создании объектов
 # container.config.from_dict({})
 
-db_manager = container.db_manager()
+db_manager = container.database.db_manager()
 rabbitmq_manager = container.rabbitmq_manager()
 
 
