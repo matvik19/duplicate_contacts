@@ -44,7 +44,6 @@ class MergeAllContacts:
                 main_contact, duplicates, duplicate_settings.priority_fields
             )
             logger.info(f"Подготовленный payload для слияния: {payload}")
-
             try:
                 await self.amocrm_service.merge_contacts(
                     self.amocrm_service.client_session,

@@ -38,6 +38,7 @@ class MergeAllContactsConsumer(BaseConsumer):
                     session, subdomain
                 )
             )
+            print(f"{duplicate_settings=}")
             if not duplicate_settings:
                 logger.info(f"Настройки дублей не найдены для subdomain: {subdomain}")
                 return
@@ -56,7 +57,5 @@ class MergeAllContactsConsumer(BaseConsumer):
 
             logger.info("✅ Дубли контактов успешно обработаны.")
         except Exception as e:
-            logger.error(
-                f"❌LJNFK:JLASNFNJASNFDJKNASKJDFNKASJDNJA Ошибка обработки дублей контактов: {e}"
-            )
+            logger.error(f"❌ Ошибка обработки дублей контактов: {e}")
             raise

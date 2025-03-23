@@ -148,29 +148,48 @@ class FindDuplicateService:
         groups_dict = defaultdict(list)
         for contact in contacts:
             key_values = []
+            skip_contact = False
             for field_name in fields_for_merge:
                 value = self._extract_field_value_simple(contact, field_name)
+                # Если значение поля отсутствует или пустое – пропускаем этот контакт.
+                if not value:
+                    skip_contact = True
+                    break
                 key_values.append(value)
+            if skip_contact:
+                continue
             key_tuple = tuple(key_values)
             groups_dict[key_tuple].append(contact)
         return [group for group in groups_dict.values() if len(group) > 1]
 
-    @staticmethod
-    def _extract_field_value_simple(contact: dict, field_name: str) -> str | None:
-        custom_fields = contact.get("custom_fields_values")
-        if custom_fields:
-            for field_data in custom_fields:
-                if (
-                    field_data.get("field_name") == field_name
-                    and "values" in field_data
-                ):
-                    return field_data["values"][0].get("value")
+    def _extract_field_value_simple(self, contact: dict, field_name: str) -> str | None:
+        custom_fields = contact.get("custom_fields_values") or []
+        for field_data in custom_fields:
+            if field_data.get("field_name") == field_name and "values" in field_data:
+                val = field_data["values"][0].get("value")
+                if not val:
+                    continue
+                field_code = (field_data.get("field_code") or "").upper()
+                if field_code == "PHONE":
+                    return self.normalize_phone(val)
+                elif field_code == "EMAIL":
+                    # Для EMAIL нормализацию текстового поля не применяем (или можно добавить .lower() при необходимости)
+                    return val
+                else:
+                    # Для всех остальных текстовых полей приводим к единому виду
+                    if isinstance(val, str):
+                        return self.normalize_text(val)
+                    return val
+        # Если значение не найдено среди кастомных полей, пытаемся получить стандартное поле
         standard_value = contact.get(field_name)
+        if isinstance(standard_value, str) and standard_value:
+            # Если стандартное поле текстовое, то нормализуем его (так как это не EMAIL и не PHONE)
+            return self.normalize_text(standard_value)
         return standard_value if standard_value else None
 
     @staticmethod
     def _has_exclusion(contact: dict, exclusion_mapping: dict) -> bool:
-        custom_fields = contact.get("custom_fields_values", [])
+        custom_fields = contact.get("custom_fields_values") or []
         for field_data in custom_fields:
             field_name = field_data.get("field_name")
             if field_name in exclusion_mapping:
@@ -187,3 +206,21 @@ class FindDuplicateService:
                 )
                 return True
         return False
+
+    @staticmethod
+    def normalize_text(text: str) -> str:
+        """
+        Приводит текст к нижнему регистру и обрезает пробелы по краям.
+        """
+        return text.strip().lower()
+
+    @staticmethod
+    def normalize_phone(phone: str) -> str:
+        """
+        Удаляет из номера телефона все символы, кроме цифр.
+        Если номер состоит из 11 цифр и начинается с '8', заменяет её на '7'.
+        """
+        digits = "".join(c for c in phone if c.isdigit())
+        if len(digits) == 11 and digits.startswith("8"):
+            digits = "7" + digits[1:]
+        return digits

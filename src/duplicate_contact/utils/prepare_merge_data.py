@@ -1,6 +1,17 @@
 import json
 
 
+def normalize_phone(phone: str) -> str:
+    """
+    Удаляет из номера телефона все символы, кроме цифр.
+    Если номер состоит из 11 цифр и начинается с '8', заменяет её на '7'.
+    """
+    digits = "".join(c for c in phone if c.isdigit())
+    if len(digits) == 11 and digits.startswith("8"):
+        digits = "7" + digits[1:]
+    return digits
+
+
 async def prepare_merge_data(
     main_contact: dict, duplicate_contacts: list, priority_fields: list
 ) -> dict:
@@ -10,11 +21,13 @@ async def prepare_merge_data(
       - Объединения тегов из всех контактов.
       - Обработки кастомных полей:
           • Для телефонов и email создаются JSON-строки с DESCRIPTION и VALUE.
-          • Остальные поля берутся как есть (с приоритетом из самого нового дубликата, если указан).
+            Для поля PHONE объединяются все номера из главного контакта и дублей,
+            но в итоговый payload попадают только уникальные номера (сравнение по нормализованному значению).
+          • Остальные поля берутся как есть (с приоритетом из самого нового дубликата, если задано).
       - Добавления компании, если она есть.
       - Добавления сделок для контактов (только их ID).
     """
-    # Собираем все контакты (основной + дубликаты)
+    # Собираем все контакты (главный + дубликаты)
     all_contacts = [main_contact] + duplicate_contacts
     final_data = {}
 
@@ -38,10 +51,10 @@ async def prepare_merge_data(
     if all_tags:
         final_data["result_element[TAGS][]"] = list(all_tags)
 
-    # Извлекаем кастомные поля из основного контакта
+    # Извлекаем кастомные поля из главного контакта
     custom_fields = extract_custom_fields(main_contact)
 
-    # Обновляем кастомные поля приоритетными данными из самого нового дубликата
+    # Обновляем кастомные поля приоритетными данными из самого нового дубликата (если priority_fields заданы)
     if duplicate_contacts:
         newest_contact = duplicate_contacts[-1]
         new_fields = extract_custom_fields(newest_contact)
@@ -52,7 +65,41 @@ async def prepare_merge_data(
                     custom_fields[field_id] = value
                     break
 
-    # Добавляем кастомные поля в итоговый запрос
+    # Добавляем поля из дублей, которых нет в главном контакте.
+    # Особая логика для поля PHONE: объединяем номера так, чтобы в итоговом payload оставались только уникальные номера.
+    for duplicate in duplicate_contacts:
+        dup_fields = extract_custom_fields(duplicate)
+        for field_id, value in dup_fields.items():
+            field_code = get_field_code_by_id(duplicate, field_id)
+            if field_code and field_code.upper() == "PHONE":
+                if field_id in custom_fields:
+                    # custom_fields[field_id] – список номеров из главного контакта
+                    main_phones = custom_fields[
+                        field_id
+                    ]  # список словарей с ключами DESCRIPTION и VALUE
+                    # Собираем нормализованные номера из главного контакта
+                    normalized_main = {
+                        normalize_phone(p.get("VALUE", ""))
+                        for p in main_phones
+                        if p.get("VALUE")
+                    }
+                    # value – список номеров из дубля
+                    for phone_entry in value:
+                        phone_value = phone_entry.get("VALUE")
+                        if phone_value:
+                            normalized_value = normalize_phone(phone_value)
+                            if normalized_value not in normalized_main:
+                                main_phones.append(phone_entry)
+                                normalized_main.add(normalized_value)
+                    custom_fields[field_id] = main_phones
+                else:
+                    custom_fields[field_id] = value
+            else:
+                if field_id not in custom_fields:
+                    custom_fields[field_id] = value
+
+    # Формируем итоговый payload с кастомными полями.
+    # Для мульти-текстовых полей (PHONE, EMAIL) значение передается как JSON-строка (одна запись на номер)
     for field_id, value in custom_fields.items():
         if isinstance(value, list):
             final_data[f"result_element[cfv][{field_id}][]"] = [
@@ -61,7 +108,7 @@ async def prepare_merge_data(
         else:
             final_data[f"result_element[cfv][{field_id}]"] = value
 
-    # Обработка компании: если у основного контакта есть компании, берём первую
+    # Обработка компании: если у главного контакта есть компании, берём первую
     companies = main_contact.get("_embedded", {}).get("companies", [])
     if companies:
         company = companies[0]
@@ -87,29 +134,26 @@ async def prepare_merge_data(
 def process_multi_text_field(field: dict) -> list:
     """
     Обрабатывает поля с multitext (например, PHONE, EMAIL) и возвращает список словарей
-    с ключами DESCRIPTION и VALUE, повторяя каждый элемент 'repeat_count' раз.
+    с ключами DESCRIPTION и VALUE.
     """
     entries = []
     values = field.get("values", [])
-
-    # Повторяем значения столько раз, сколько их в поле
     for value_obj in values:
         entry = {
             "DESCRIPTION": value_obj.get("enum_code", "WORK"),
             "VALUE": value_obj.get("value"),
         }
         entries.append(entry)
-
     return entries
 
 
 def extract_custom_fields(contact: dict) -> dict:
     """
     Извлекает кастомные поля контакта и возвращает словарь вида {field_id: value}.
-    Для PHONE и EMAIL используется process_multitext_field, для остальных берется первое значение.
+    Для PHONE и EMAIL используется process_multi_text_field, для остальных берется первое значение.
     """
     fields = {}
-    for field in contact.get("custom_fields_values", []):
+    for field in contact.get("custom_fields_values") or []:
         field_id = field.get("field_id")
         if not field_id or "values" not in field:
             continue
@@ -124,7 +168,17 @@ def get_field_name_by_id(contact: dict, field_id) -> str | None:
     """
     Ищет в custom_fields_values контакта поле с заданным field_id и возвращает его имя.
     """
-    for field in contact.get("custom_fields_values", []):
+    for field in contact.get("custom_fields_values") or []:
         if field.get("field_id") == field_id:
             return field.get("field_name")
+    return None
+
+
+def get_field_code_by_id(contact: dict, field_id) -> str | None:
+    """
+    Ищет в custom_fields_values контакта поле с заданным field_id и возвращает его код.
+    """
+    for field in contact.get("custom_fields_values") or []:
+        if field.get("field_id") == field_id:
+            return field.get("field_code")
     return None
