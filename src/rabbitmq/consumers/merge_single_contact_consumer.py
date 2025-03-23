@@ -3,14 +3,14 @@ from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.common.token_service import TokenService
+from src.duplicate_contact.services.contact_merge_service import ContactMergeService
 from src.duplicate_contact.services.duplicate_settings import (
     DuplicateSettingsService,
 )
-from src.duplicate_contact.services.merge_single_contact import MergeOneContact
 from src.rabbitmq.consumers.base_consumer import BaseConsumer
 
 
-class MergeOneContactConsumer(BaseConsumer):
+class MergeSingleContactConsumer(BaseConsumer):
     """Консьюмер для обработки дублей контактов."""
 
     def __init__(
@@ -19,7 +19,7 @@ class MergeOneContactConsumer(BaseConsumer):
         connection_manager,
         rmq_publisher,
         db_manager,
-        duplicate_service: MergeOneContact,
+        duplicate_service: ContactMergeService,
         token_service: TokenService,
         duplicate_settings_service: DuplicateSettingsService,
     ):
@@ -50,7 +50,7 @@ class MergeOneContactConsumer(BaseConsumer):
                 return
 
             # ✅ Теперь просто вызываем сервис дублей
-            await self.duplicate_service.merge_duplicate_for_contact(
+            await self.duplicate_service.merge_single_contact(
                 duplicate_settings, access_token, contact_id
             )
 

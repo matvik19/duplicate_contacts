@@ -6,12 +6,13 @@ from src.common.config import CONNECTION_URL_DB, CONNECTION_URL_RMQ
 from src.common.database import DatabaseManager
 from src.common.token_service import TokenService
 from src.duplicate_contact.repository import ContactDuplicateRepository
+from src.duplicate_contact.services.contact_merge_service import ContactMergeService
 from src.duplicate_contact.services.duplicate_settings import DuplicateSettingsService
 from src.duplicate_contact.services.find_duplicate import FindDuplicateService
-from src.duplicate_contact.services.merge_duplicate import MergeAllContacts
-from src.duplicate_contact.services.merge_single_contact import MergeOneContact
 from src.rabbitmq.consumers.merge_all_contacts_consumer import MergeAllContactsConsumer
-from src.rabbitmq.consumers.merge_one_contact_consumer import MergeOneContactConsumer
+from src.rabbitmq.consumers.merge_single_contact_consumer import (
+    MergeSingleContactConsumer,
+)
 from src.rabbitmq.consumers.save_settings import (
     ContactDuplicateSettingsConsumer,
 )
@@ -51,14 +52,8 @@ class ServiceContainer(containers.DeclarativeContainer):
     find_duplicate_service = providers.Factory(
         FindDuplicateService, amocrm_service=amocrm_service
     )
-    merge_all_contacts = providers.Factory(
-        MergeAllContacts,
-        find_duplicate_service=find_duplicate_service,
-        amocrm_service=amocrm_service,
-    )
-
-    merge_one_contact = providers.Factory(
-        MergeOneContact,
+    merge_contact_service = providers.Factory(
+        ContactMergeService,
         find_duplicate_service=find_duplicate_service,
         amocrm_service=amocrm_service,
     )
@@ -85,24 +80,24 @@ class ConsumerContainer(containers.DeclarativeContainer):
         connection_manager=connection_manager,
         rmq_publisher=rmq_publisher,
         db_manager=db_manager,
-        duplicate_service=ServiceContainer.merge_all_contacts,
+        duplicate_service=ServiceContainer.merge_contact_service,
         token_service=token_service,
         duplicate_settings_service=duplicate_settings_service,
     )
-    merge_duplicates_one_contact_consumer = providers.Singleton(
-        MergeOneContactConsumer,
-        queue_name="merge_duplicates_one_contact",
+    merge_duplicates_single_contact_consumer = providers.Singleton(
+        MergeSingleContactConsumer,
+        queue_name="merge_duplicates_single_contact",
         connection_manager=connection_manager,
         rmq_publisher=rmq_publisher,
         db_manager=db_manager,
-        duplicate_service=ServiceContainer.merge_one_contact,
+        duplicate_service=ServiceContainer.merge_contact_service,
         token_service=token_service,
         duplicate_settings_service=duplicate_settings_service,
     )
     consumers = providers.List(
         save_contact_duplicates_settings_consumer,
         merge_duplicates_all_contacts_consumer,
-        merge_duplicates_one_contact_consumer,
+        merge_duplicates_single_contact_consumer,
     )
 
 

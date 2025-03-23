@@ -1,5 +1,3 @@
-# contact_duplicate_repository.py
-
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlalchemy import select, insert, delete

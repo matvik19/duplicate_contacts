@@ -37,7 +37,7 @@ class RMQManager:
             dead_letter_queues = {
                 "merge_duplicates_all_contacts": "dead_letter_merge_duplicates_all_contacts",
                 "save_contact_duplicates_settings": "dead_letter_save_contact_duplicates_settings",
-                "merge_duplicates_one_contact": "dead_letter_merge_duplicates_one_contact",
+                "merge_duplicates_single_contact": "dead_letter_merge_duplicates_single_contact",
             }
 
             # Создаем и связываем DLX

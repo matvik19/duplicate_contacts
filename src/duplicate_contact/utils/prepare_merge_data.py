@@ -1,17 +1,6 @@
 import json
 
 
-def normalize_phone(phone: str) -> str:
-    """
-    Удаляет из номера телефона все символы, кроме цифр.
-    Если номер состоит из 11 цифр и начинается с '8', заменяет её на '7'.
-    """
-    digits = "".join(c for c in phone if c.isdigit())
-    if len(digits) == 11 and digits.startswith("8"):
-        digits = "7" + digits[1:]
-    return digits
-
-
 async def prepare_merge_data(
     main_contact: dict, duplicate_contacts: list, priority_fields: list
 ) -> dict:
@@ -27,9 +16,10 @@ async def prepare_merge_data(
       - Добавления компании, если она есть.
       - Добавления сделок для контактов (только их ID).
     """
+
     # Собираем все контакты (главный + дубликаты)
-    all_contacts = [main_contact] + duplicate_contacts
     final_data = {}
+    all_contacts = [main_contact] + duplicate_contacts
 
     # Список ID контактов для слияния
     final_data["id[]"] = [contact["id"] for contact in all_contacts]
@@ -182,3 +172,14 @@ def get_field_code_by_id(contact: dict, field_id) -> str | None:
         if field.get("field_id") == field_id:
             return field.get("field_code")
     return None
+
+
+def normalize_phone(phone: str) -> str:
+    """
+    Удаляет из номера телефона все символы, кроме цифр.
+    Если номер состоит из 11 цифр и начинается с '8', заменяет её на '7'.
+    """
+    digits = "".join(c for c in phone if c.isdigit())
+    if len(digits) == 11 and digits.startswith("8"):
+        digits = "7" + digits[1:]
+    return digits

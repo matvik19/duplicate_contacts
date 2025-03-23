@@ -1,3 +1,4 @@
+import time
 from collections import defaultdict
 from loguru import logger
 from src.amocrm.service import AmocrmService
@@ -7,30 +8,18 @@ class FindDuplicateService:
     def __init__(self, amocrm_service: AmocrmService) -> None:
         self.amocrm_service = amocrm_service
 
-    async def find_duplicates_for_contact(
+    async def find_duplicates_single_contact(
         self,
         subdomain: str,
         access_token: str,
         contact_id: int,
         blocks: list[dict],
+        merge_all: bool = True,
     ) -> list[dict]:
         """
         Находит дубли для конкретного контакта (contact_id) на основе настроек блоков.
 
-        Алгоритм:
-          1. Получаем основной контакт по contact_id.
-          2. Получаем всех кандидатов (все контакты, кроме основного).
-          3. Для каждого блока извлекаем поля для сравнения и словарь исключений.
-          4. Из основного контакта собираем значения по указанным полям.
-          5. Для каждого кандидата проверяем: если хотя бы по одному полю значение совпадает с основным
-             и кандидат не содержит исключённых значений, то включаем его в дубли.
-          6. Возвращаем группу, где первым будет основной контакт, а далее найденные дубли, отсортированные по created_at.
-
-        :param subdomain: Поддомен amoCRM.
-        :param access_token: Токен доступа.
-        :param contact_id: Идентификатор основного контакта.
-        :param blocks: Список блоков настроек дублей.
-        :return: Группа контактов [main_contact, duplicate1, duplicate2, ...] или пустой список.
+        Если merge_all=False, сливаем только те контакты, которые созданы в течение последних 24 часов.
         """
         main_contact = await self.amocrm_service.get_contact_by_id(
             subdomain, access_token, contact_id
@@ -39,12 +28,29 @@ class FindDuplicateService:
             logger.info(f"Контакт с id {contact_id} не найден.")
             return []
 
+        # Если merge_all = False, проверяем, "новый" ли сам главный контакт
+        if not merge_all:
+            now_ts = int(time.time())
+            day_ago_ts = now_ts - 86400  # 24 часа
+            if main_contact.get("created_at", 0) < day_ago_ts:
+                logger.info(
+                    f"Главный контакт {contact_id} старше 24 часов, пропускаем слияние."
+                )
+                return []
+
+        # Получаем всех кандидатов
         all_contacts = await self.amocrm_service.get_all_contacts(
             subdomain, access_token
         )
         candidates = [
             contact for contact in all_contacts if contact.get("id") != contact_id
         ]
+
+        # Если merge_all = False, фильтруем кандидатов по дате создания (только за последние 24 часа)
+        if not merge_all:
+            now_ts = int(time.time())
+            day_ago_ts = now_ts - 86400
+            candidates = [c for c in candidates if c.get("created_at", 0) >= day_ago_ts]
 
         duplicates = []
         for block in blocks:
@@ -60,42 +66,44 @@ class FindDuplicateService:
                     main_values[field_name] = value
 
             for candidate in candidates:
-                for field_name, main_val in main_values.items():
-                    candidate_val = self._extract_field_value_simple(
-                        candidate, field_name
-                    )
-                    if candidate_val and candidate_val == main_val:
-                        if not self._has_exclusion(candidate, exclusion_mapping):
-                            duplicates.append(candidate)
-                            break
+                if all(
+                    self._extract_field_value_simple(candidate, field_name) == main_val
+                    for field_name, main_val in main_values.items()
+                ) and not self._has_exclusion(candidate, exclusion_mapping):
+                    duplicates.append(candidate)
+
         if duplicates:
+            # Собираем [main_contact, ...duplicates], убираем дубликаты по id
             group = {main_contact["id"]: main_contact}
             for candidate in duplicates:
                 group[candidate["id"]] = candidate
             group_list = list(group.values())
             group_list.sort(key=lambda x: x.get("created_at", float("inf")))
             return group_list
+
         return []
 
-    async def find_duplicates_with_blocks(
+    async def find_duplicates_all_contacts(
         self,
         subdomain: str,
         access_token: str,
         blocks: list[dict],
+        merge_all: bool = True,
     ):
         """
-        Находит группы дублей контактов на основе списка блоков (blocks),
-        учитывая поля и исключения, переданные внутри каждого блока.
-
-        :param subdomain: Поддомен amoCRM.
-        :param access_token: Токен доступа.
-        :param blocks: Список блоков настроек дублей.
-        :return: Список групп контактов-дублей.
+        Находит группы дублей контактов на основе списка блоков (blocks).
+        Если merge_all=False, то берём только контакты, созданные в течение последних 24 часов.
         """
         contacts = await self.amocrm_service.get_all_contacts(subdomain, access_token)
         if not contacts:
             logger.info("Контакты не найдены.")
             return []
+
+        # Если merge_all=False, фильтруем контакты по дате создания
+        if not merge_all:
+            now_ts = int(time.time())
+            day_ago_ts = now_ts - 86400
+            contacts = [c for c in contacts if c.get("created_at", 0) >= day_ago_ts]
 
         all_groups = []
         for block in blocks:

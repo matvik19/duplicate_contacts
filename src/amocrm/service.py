@@ -192,3 +192,33 @@ class AmocrmService:
                 status_code=500,
                 detail=f"Unexpected error during merging contacts: {e}",
             )
+
+    async def add_tag_merged_to_contact(
+        self,
+        subdomain: str,
+        access_token: str,
+        contact_id: int,
+        all_tags: list | None,
+    ) -> dict:
+        """
+        Добавляет тег "merged" к контакту в amoCRM.
+        Если список тегов all_tags уже существует, дополняет его тегом "merged",
+        иначе создает новый список с тегом "merged".
+        """
+        if all_tags:
+            all_tags.append({"name": "merged"})
+        else:
+            all_tags = [{"name": "merged"}]
+
+        payload = {
+            "_embedded": {
+                "tags": [
+                    {"id": tag} if isinstance(tag, int) else tag for tag in all_tags
+                ]
+            }
+        }
+
+        endpoint = f"/api/v4/contacts/{contact_id}"
+        return await self.request(
+            "PATCH", subdomain, access_token, endpoint, json=payload
+        )
