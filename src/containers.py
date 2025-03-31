@@ -8,7 +8,9 @@ from src.common.token_service import TokenService
 from src.duplicate_contact.repository import ContactDuplicateRepository
 from src.duplicate_contact.services.contact_merge_service import ContactMergeService
 from src.duplicate_contact.services.duplicate_settings import DuplicateSettingsService
+from src.duplicate_contact.services.exclusion import ExclusionService
 from src.duplicate_contact.services.find_duplicate import FindDuplicateService
+from src.rabbitmq.consumers.add_exclusion import ExclusionConsumer
 from src.rabbitmq.consumers.merge_all_contacts_consumer import MergeAllContactsConsumer
 from src.rabbitmq.consumers.merge_single_contact_consumer import (
     MergeSingleContactConsumer,
@@ -56,6 +58,13 @@ class ServiceContainer(containers.DeclarativeContainer):
         ContactMergeService,
         find_duplicate_service=find_duplicate_service,
         amocrm_service=amocrm_service,
+        duplicate_repo=duplicate_repo,
+    )
+
+    exclusion_service = providers.Factory(
+        ExclusionService,
+        amocrm_service=amocrm_service,
+        duplicate_repo=duplicate_repo,
     )
 
 
@@ -65,6 +74,7 @@ class ConsumerContainer(containers.DeclarativeContainer):
     db_manager = DatabaseContainer.db_manager
     duplicate_settings_service = ServiceContainer.duplicate_settings_service
     token_service = ServiceContainer.token_service
+    exclusion_service = ServiceContainer.exclusion_service
 
     save_contact_duplicates_settings_consumer = providers.Singleton(
         ContactDuplicateSettingsConsumer,
@@ -94,10 +104,20 @@ class ConsumerContainer(containers.DeclarativeContainer):
         token_service=token_service,
         duplicate_settings_service=duplicate_settings_service,
     )
+    add_contact_in_exclusion_consumer = providers.Singleton(
+        ExclusionConsumer,
+        queue_name="add_contact_in_exclusion_consumer",
+        connection_manager=connection_manager,
+        rmq_publisher=rmq_publisher,
+        db_manager=db_manager,
+        exclusion_service=exclusion_service,
+        token_service=token_service,
+    )
     consumers = providers.List(
         save_contact_duplicates_settings_consumer,
         merge_duplicates_all_contacts_consumer,
         merge_duplicates_single_contact_consumer,
+        add_contact_in_exclusion_consumer,
     )
 
 

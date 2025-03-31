@@ -32,6 +32,7 @@ class DuplicateSettingsService:
                 ],
                 blocks=[
                     {
+                        "db_id": block.id,
                         "block_id": block.block_id,
                         "fields": [
                             {

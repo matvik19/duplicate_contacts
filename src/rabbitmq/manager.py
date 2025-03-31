@@ -38,6 +38,7 @@ class RMQManager:
                 "merge_duplicates_all_contacts": "dead_letter_merge_duplicates_all_contacts",
                 "save_contact_duplicates_settings": "dead_letter_save_contact_duplicates_settings",
                 "merge_duplicates_single_contact": "dead_letter_merge_duplicates_single_contact",
+                "add_contact_in_exclusion_consumer": "dead_letter_add_contact_in_exclusion_consumer",
             }
 
             # Создаем и связываем DLX
@@ -68,3 +69,4 @@ class RMQManager:
 
         # Запускаем всех консьюмеров асинхронно
         await asyncio.gather(*(consumer.start() for consumer in self.consumers))
+        logger.info("Все консьюмеры завершили выполнение (это не должно произойти!)")

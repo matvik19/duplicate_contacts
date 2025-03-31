@@ -7,6 +7,7 @@ from src.duplicate_contact.models import (
     Block,
     BlockField,
     ExclusionField,
+    MergeBlockLog,
 )
 from src.duplicate_contact.schemas import ContactDuplicateSettingsSchema
 
@@ -19,6 +20,7 @@ class ContactDuplicateRepository:
     block: type[Block] = Block
     block_field: type[BlockField] = BlockField
     exclusion_fields: type[ExclusionField] = ExclusionField
+    merge_block_log: type[MergeBlockLog] = MergeBlockLog
 
     async def get_settings_by_subdomain(
         self, session: AsyncSession, subdomain: str
@@ -145,3 +147,38 @@ class ContactDuplicateRepository:
             ]
         )
         await session.execute(stmt)
+
+    # Метод для вставки записи лога склейки
+    async def insert_merge_block_log(
+        self, session: AsyncSession, subdomain: str, block_id: int, contact_id: int
+    ) -> None:
+        stmt = insert(self.merge_block_log).values(
+            subdomain=subdomain, block_id=block_id, contact_id=contact_id
+        )
+        await session.execute(stmt)
+
+    async def get_merge_log_by_contact_and_subdomain(
+        self, session: AsyncSession, contact_id: int, subdomain: str
+    ) -> MergeBlockLog | None:
+        stmt = (
+            select(self.merge_block_log)
+            .where(
+                self.merge_block_log.contact_id == contact_id,
+                self.merge_block_log.subdomain == subdomain,
+            )
+            .order_by(self.merge_block_log.created_at.desc())
+            .limit(1)
+        )
+        result = await session.execute(stmt)
+        return result.scalar_one_or_none()
+
+    async def get_block_by_id(
+        self, session: AsyncSession, block_db_id: int
+    ) -> Block | None:
+        stmt = (
+            select(self.block)
+            .where(self.block.id == block_db_id)
+            .options(selectinload(self.block.fields))
+        )
+        result = await session.execute(stmt)
+        return result.scalar_one_or_none()

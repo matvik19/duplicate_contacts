@@ -51,7 +51,7 @@ class MergeSingleContactConsumer(BaseConsumer):
 
             # ✅ Теперь просто вызываем сервис дублей
             await self.duplicate_service.merge_single_contact(
-                duplicate_settings, access_token, contact_id
+                duplicate_settings, access_token, contact_id, session
             )
 
             logger.info("✅ Дубли контакта успешно обработаны.")

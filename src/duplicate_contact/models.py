@@ -1,4 +1,7 @@
+from datetime import datetime
+
 import sqlalchemy as sa
+from sqlalchemy import DateTime, func, Index
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from src.common.database import Base
 
@@ -66,6 +69,10 @@ class Block(Base):
         "BlockField", back_populates="block", cascade="all, delete-orphan"
     )
 
+    merge_logs: Mapped[list["MergeBlockLog"]] = relationship(
+        "MergeBlockLog", back_populates="block", cascade="all, delete-orphan"
+    )
+
     __table_args__ = (
         sa.UniqueConstraint(
             "block_id", "settings_id", name="uq_block_blockid_settings"
@@ -105,4 +112,28 @@ class ExclusionField(Base):
     )
     block_field: Mapped["BlockField"] = relationship(
         "BlockField", back_populates="exclusion_values"
+    )
+
+
+class MergeBlockLog(Base):
+    """Лог объединения контактов."""
+
+    __tablename__ = "merge_block_logs"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    subdomain: Mapped[str] = mapped_column(sa.String(256), nullable=False)
+    block_id: Mapped[int] = mapped_column(
+        sa.ForeignKey("blocks.id", ondelete="CASCADE"), nullable=False
+    )
+    contact_id: Mapped[int] = mapped_column(
+        sa.Integer, nullable=False
+    )  # Итоговый контакт после склейки
+    created_at: Mapped[datetime] = mapped_column(
+        sa.DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    block: Mapped["Block"] = relationship("Block", back_populates="merge_logs")
+
+    __table_args__ = (
+        Index("ix_merge_block_logs_subdomain_contact_id", "subdomain", "contact_id"),
     )
