@@ -9,7 +9,7 @@ from src.duplicate_contact.services.duplicate_settings import (
 from src.rabbitmq.consumers.base_consumer import BaseConsumer
 
 
-class SaveSettingsConsumer(BaseConsumer):
+class GetSettingsConsumer(BaseConsumer):
     """Консьюмер для обработки дублей контактов."""
 
     def __init__(
@@ -25,18 +25,26 @@ class SaveSettingsConsumer(BaseConsumer):
 
     async def handle_message(self, data: dict, session: AsyncSession):
         """Обрабатывает сообщение с дублями контактов."""
+        subdomain = data["subdomain"]
+        reply_to = data["reply_to"]
+        correlation_id = data["correlation_id"]
+
         try:
+            settings = await self.duplicate_settings_service.get_duplicate_settings(
+                session, subdomain
+            )
             logger.info(
                 f"Получены настройки на дубли контактов: {json.dumps(data, indent=2)}"
             )
 
-            settings_data = ContactDuplicateSettingsSchema(**data)
-
-            await self.duplicate_settings_service.add_duplicate_settings(
-                session, settings_data
-            )
-
-            logger.info("✅ Дубли контактов успешно обработаны.")
+            # Если получен параметр reply_to, отправляем ответ
+            if reply_to:
+                # Отправляем настройки обратно в очередь
+                await self.rmq_publisher.send_response(
+                    json.dumps(settings), reply_to, correlation_id
+                )
+                logger.info(f"Ответ отправлен в очередь {reply_to}.")
+            logger.info("Отдали настройки")
         except Exception as e:
-            logger.error(f"❌ Ошибка обработки дублей контактов: {e}")
+            logger.error(f"❌ Ошибка при возврате настроек для {subdomain}: {e}")
             raise

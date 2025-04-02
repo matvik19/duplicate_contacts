@@ -4,7 +4,7 @@ from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.common.token_service import TokenService
-from src.duplicate_contact.services.exclusion import ExclusionService
+from src.duplicate_contact.services.exclusion import ContactExclusionService
 from src.rabbitmq.consumers.base_consumer import BaseConsumer
 
 
@@ -17,7 +17,7 @@ class ExclusionConsumer(BaseConsumer):
         connection_manager,
         rmq_publisher,
         db_manager,
-        exclusion_service: ExclusionService,
+        exclusion_service: ContactExclusionService,
         token_service: TokenService,
     ):
         super().__init__(queue_name, connection_manager, rmq_publisher, db_manager)

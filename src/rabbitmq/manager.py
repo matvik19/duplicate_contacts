@@ -39,6 +39,7 @@ class RMQManager:
                 "save_contact_duplicates_settings": "dead_letter_save_contact_duplicates_settings",
                 "merge_duplicates_single_contact": "dead_letter_merge_duplicates_single_contact",
                 "add_contact_in_exclusion_consumer": "dead_letter_add_contact_in_exclusion_consumer",
+                "get_contact_duplicates_settings": "dead_letter_get_contact_duplicates_settings",
             }
 
             # Создаем и связываем DLX

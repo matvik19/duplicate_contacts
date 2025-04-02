@@ -145,16 +145,14 @@ class AmocrmService:
             "PATCH", subdomain, access_token, f"/api/v4/leads/{lead_id}", json=payload
         )
 
-    @staticmethod
     async def merge_contacts(
-        client_session: ClientSession,
+        self,
         subdomain: str,
         access_token: str,
         result_element: dict,
     ) -> Dict[str, Any]:
         """
         Отправляет запрос на объединение контактов через API amoCRM.
-        :param client_session: aiohttp ClientSession для отправки запроса.
         :param subdomain: поддомен amoCRM.
         :param access_token: access token для авторизации.
         :param result_element: тело запроса, сформированное методом prepare_merge_data.
@@ -169,7 +167,7 @@ class AmocrmService:
         }
 
         try:
-            async with client_session.post(
+            async with self.client_session.post(
                 url, data=result_element, headers=headers
             ) as response:
                 if response.status != 202:

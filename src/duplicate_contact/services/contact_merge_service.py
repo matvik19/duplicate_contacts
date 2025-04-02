@@ -1,157 +1,147 @@
 from loguru import logger
-from typing import List, Dict, Any
-
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.amocrm.service import AmocrmService
+from src.common.exceptions import AmoCRMServiceError
 from src.duplicate_contact.repository import ContactDuplicateRepository
 from src.duplicate_contact.schemas import ContactDuplicateSettingsSchema
-from src.duplicate_contact.services.find_duplicate import FindDuplicateService
+from src.duplicate_contact.services.base import ContactService
+from src.duplicate_contact.services.find_duplicate import DuplicateFinderService
 from src.duplicate_contact.utils.prepare_merge_data import prepare_merge_data
 
 
-class ContactMergeService:
-    """
-    Сервис склейки дублей контактов
-      - Может сливать все дубли сразу.
-      - Может сливать дубли для одного конкретного контакта.
-    """
+class ContactMergeService(ContactService):
+    """Сервис для склейки дублей контактов."""
 
     def __init__(
         self,
-        find_duplicate_service: FindDuplicateService,
+        find_duplicate_service: DuplicateFinderService,
         duplicate_repo: ContactDuplicateRepository,
         amocrm_service: AmocrmService,
     ):
+        super().__init__(amocrm_service)
         self.find_duplicate_service = find_duplicate_service
         self.duplicate_repo = duplicate_repo
-        self.amocrm_service = amocrm_service
 
     async def merge_all_contacts(
         self,
-        duplicate_settings: ContactDuplicateSettingsSchema,
+        settings: ContactDuplicateSettingsSchema,
         access_token: str,
         session: AsyncSession,
-    ) -> List[Dict[str, Any]]:
-        """
-        Находит и объединяет все группы дублей контактов, соответствующие настройкам.
-        Возвращает список результатов (можно адаптировать под нужды).
-        """
-        # Ищем все группы дублей
-        duplicate_groups = (
-            await self.find_duplicate_service.find_duplicates_all_contacts(
-                subdomain=duplicate_settings.subdomain,
-                access_token=access_token,
-                blocks=duplicate_settings.blocks,
-                merge_all=duplicate_settings.merge_all,
-            )
+    ) -> list[dict[str, any]]:
+        """Объединяет все группы дублей контактов."""
+        groups = await self.find_duplicate_service.find_duplicates_all_contacts(
+            subdomain=settings.subdomain,
+            access_token=access_token,
+            blocks=settings.keys,
+            merge_all=settings.merge_all,
         )
-        logger.info(f"Найдено групп дублей: {duplicate_groups}")
-
-        if not duplicate_groups:
+        logger.info(f"Найдено групп дублей: {len(groups)}")
+        if not groups:
             logger.info("Дубли не найдены.")
             return []
 
-        results = []
-        # Сливаем каждую группу
-        for group in duplicate_groups:
-            if len(group) < 2:
-                continue
-            merge_result = await self._merge_contact_group(
-                group_data=group,
-                duplicate_settings=duplicate_settings,
-                access_token=access_token,
-                session=session,
+        return [
+            result
+            async for result in self._process_groups(
+                groups, settings, access_token, session
             )
-            if merge_result is not None:
-                results.append(merge_result)
-        return results
+            if result
+        ]
 
     async def merge_single_contact(
         self,
-        duplicate_settings: ContactDuplicateSettingsSchema,
+        settings: ContactDuplicateSettingsSchema,
         access_token: str,
         contact_id: int,
         session: AsyncSession,
-    ) -> Dict[str, Any]:
-        """
-        Находит и объединяет дубли только для одного контакта (contact_id).
-        Возвращает результат слияния или пустой словарь, если дублей нет.
-        """
-        # Ищем дубли для конкретного контакта
-        duplicate_group = (
-            await self.find_duplicate_service.find_duplicates_single_contact(
-                subdomain=duplicate_settings.subdomain,
-                access_token=access_token,
-                contact_id=contact_id,
-                blocks=duplicate_settings.blocks,
-                merge_all=duplicate_settings.merge_all,
-            )
+    ) -> dict[str, any]:
+        """Объединяет дубли для одного контакта."""
+        group = await self.find_duplicate_service.find_duplicates_single_contact(
+            subdomain=settings.subdomain,
+            access_token=access_token,
+            contact_id=contact_id,
+            blocks=settings.keys,
+            merge_all=settings.merge_all,
         )
-        if not duplicate_group or len(duplicate_group) < 2:
-            logger.info(f"Дубликаты не найдены для контакта {contact_id}.")
+        if not group or len(group.get("group", [])) < 2:
+            logger.info(f"Дубли не найдены для контакта {contact_id}.")
             return {}
 
-        # Сливаем найденную группу (тут она одна)
-        merge_result = await self._merge_contact_group(
-            group_data=duplicate_group,
-            duplicate_settings=duplicate_settings,
-            access_token=access_token,
-            session=session,
-        )
-        return merge_result if merge_result else {}
+        result = await self._merge_contact_group(group, settings, access_token, session)
+        return result or {}
+
+    async def _process_groups(
+        self,
+        groups: list[dict[str, any]],
+        settings: ContactDuplicateSettingsSchema,
+        access_token: str,
+        session: AsyncSession,
+    ):
+        """Генератор для обработки групп дублей."""
+        for group_data in groups:
+            if len(group_data.get("group", [])) >= 2:
+                yield await self._merge_contact_group(
+                    group_data, settings, access_token, session
+                )
 
     async def _merge_contact_group(
         self,
-        group_data: dict,
-        duplicate_settings: ContactDuplicateSettingsSchema,
+        group_data: dict[str, any],
+        settings: ContactDuplicateSettingsSchema,
         access_token: str,
         session: AsyncSession,
-    ) -> Dict[str, Any] | None:
-        """
-        Вспомогательный метод, сливающий конкретную группу дублей (main_contact + duplicates).
-        """
-        group = group_data.get("group")
+    ) -> dict[str, any] | None:
+        """Сливает группу дублей."""
+        group = group_data["group"]
         matched_block_db_id = group_data.get("matched_block_db_id")
-        if len(group) < 2:
-            return None
-
-        main_contact = group[0]
-        duplicates = group[1:]
-
-        # Формируем payload для слияния
-        payload = await prepare_merge_data(
-            main_contact, duplicates, duplicate_settings.priority_fields
-        )
-        logger.info(f"Подготовленный payload для слияния: {payload}")
+        main_contact, *duplicates = group
+        contact_ids = [c["id"] for c in group]
 
         try:
+            payload = await prepare_merge_data(
+                main_contact, duplicates, settings.priority_fields
+            )
+            logger.info(f"Подготовлен payload для слияния: {payload}")
+
             merge_response = await self.amocrm_service.merge_contacts(
-                client_session=self.amocrm_service.client_session,
-                subdomain=duplicate_settings.subdomain,
+                subdomain=settings.subdomain,
                 access_token=access_token,
                 result_element=payload,
             )
+            if not merge_response:
+                raise AmoCRMServiceError(
+                    f"Не удалось выполнить слияние для группы {contact_ids}, subdomain: {settings.subdomain}"
+                )
             logger.info(f"Слияние успешно для контактов: {[c['id'] for c in group]}")
 
-            # 3. Добавляем тег "merged" (опционально)
-            tags = payload.get("result_element[TAGS][]", [])
-            await self.amocrm_service.add_tag_merged_to_contact(
-                subdomain=duplicate_settings.subdomain,
-                access_token=access_token,
-                contact_id=main_contact["id"],
-                all_tags=tags,
+            await self._add_merged_tag(
+                settings.subdomain, access_token, main_contact["id"], payload
             )
-
             if matched_block_db_id:
                 await self.duplicate_repo.insert_merge_block_log(
-                    session,
-                    duplicate_settings.subdomain,
-                    matched_block_db_id,
-                    main_contact["id"],
+                    session, settings.subdomain, matched_block_db_id, main_contact["id"]
                 )
 
             return merge_response
         except Exception as e:
-            logger.error(f"Ошибка слияния для группы {[c['id'] for c in group]}: {e}")
+            logger.error(
+                f"Ошибка слияния в _merge_contact_group для {settings.subdomain}: {e}"
+            )
             return None
+
+    async def _add_merged_tag(
+        self,
+        subdomain: str,
+        access_token: str,
+        contact_id: int,
+        payload: dict[str, any],
+    ) -> None:
+        """Добавляет тег 'merged' к контакту."""
+        tags = payload.get("result_element[TAGS][]", [])
+        await self.amocrm_service.add_tag_merged_to_contact(
+            subdomain=subdomain,
+            access_token=access_token,
+            contact_id=contact_id,
+            all_tags=tags,
+        )
