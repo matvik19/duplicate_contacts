@@ -2,6 +2,7 @@ import json
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.common.exceptions import AmoCRMServiceError
 from src.common.token_service import TokenService
 from src.duplicate_contact.services.contact_merge_service import ContactMergeService
 from src.duplicate_contact.services.duplicate_settings import (
@@ -55,6 +56,9 @@ class MergeSingleContactConsumer(BaseConsumer):
                 settings, access_token, contact_id, session
             )
             log.info("✅ Контакт успешно объединён.")
+        except AmoCRMServiceError as e:
+            log.error("Ошибка получения токена: {}", e)
+            raise
         except Exception:
             log.exception("Ошибка при объединении дубля одного контакта")
             raise

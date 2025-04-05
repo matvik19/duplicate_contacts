@@ -5,6 +5,8 @@ import uuid
 from loguru import logger
 from fastapi import HTTPException
 import async_timeout
+
+from src.common.exceptions import AmoCRMServiceError
 from src.rabbitmq.connection import RMQConnectionManager
 
 
@@ -48,7 +50,7 @@ class RPCClient:
         except asyncio.TimeoutError:
             logger.error("RPC timeout")
             await reply_queue.delete()
-            raise HTTPException(status_code=504, detail="Service timeout")
+            raise AmoCRMServiceError("Service timeout during RPC")
 
         finally:
             await reply_queue.delete()

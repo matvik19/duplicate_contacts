@@ -88,7 +88,7 @@ class ConsumerContainer(containers.DeclarativeContainer):
 
     save_contact_duplicates_settings_consumer = providers.Singleton(
         SaveSettingsConsumer,
-        queue_name="save_contact_duplicates_settings",
+        queue_name="duplicate_contacts_save_settings",
         connection_manager=connection_manager,
         rmq_publisher=rmq_publisher,
         db_manager=db_manager,
@@ -97,7 +97,7 @@ class ConsumerContainer(containers.DeclarativeContainer):
 
     get_contact_duplicates_settings_consumer = providers.Singleton(
         GetSettingsConsumer,
-        queue_name="get_contact_duplicates_settings",
+        queue_name="duplicate_contacts_get_settings",
         connection_manager=connection_manager,
         rmq_publisher=rmq_publisher,
         db_manager=db_manager,
@@ -106,7 +106,7 @@ class ConsumerContainer(containers.DeclarativeContainer):
 
     merge_duplicates_all_contacts_consumer = providers.Singleton(
         MergeAllContactsConsumer,
-        queue_name="merge_duplicates_all_contacts",
+        queue_name="duplicate_contacts_merge_all",
         connection_manager=connection_manager,
         rmq_publisher=rmq_publisher,
         db_manager=db_manager,
@@ -117,7 +117,7 @@ class ConsumerContainer(containers.DeclarativeContainer):
 
     merge_duplicates_single_contact_consumer = providers.Singleton(
         MergeSingleContactConsumer,
-        queue_name="merge_duplicates_single_contact",
+        queue_name="duplicate_contacts_merge_single",
         connection_manager=connection_manager,
         rmq_publisher=rmq_publisher,
         db_manager=db_manager,
@@ -128,7 +128,7 @@ class ConsumerContainer(containers.DeclarativeContainer):
 
     add_contact_in_exclusion_consumer = providers.Singleton(
         ExclusionConsumer,
-        queue_name="add_contact_in_exclusion_consumer",
+        queue_name="duplicate_contacts_add_in_exclusion",
         connection_manager=connection_manager,
         rmq_publisher=rmq_publisher,
         db_manager=db_manager,

@@ -106,10 +106,7 @@ class DuplicateSettingsService:
             merge_all=settings.merge_all,
             blocked_creation=settings.blocked_creation,
             merge_is_active=settings.merge_is_active,
-            priority_fields=[
-                {"field_name": f.field_name, "action": f.action}
-                for f in settings.priority_fields
-            ],
+            priority_fields=[f.field_name for f in settings.priority_fields],
             blocks=[
                 {
                     "db_id": b.id,

@@ -2,6 +2,7 @@ from src.common.config import CLIENT_ID
 from loguru import logger
 from fastapi import HTTPException
 
+from src.common.exceptions import AmoCRMServiceError
 from src.rabbitmq.rpc_client import RPCClient
 
 
@@ -18,6 +19,6 @@ class TokenService:
         )
 
         if not tokens.get("access_token") or not tokens.get("refresh_token"):
-            raise HTTPException(status_code=500, detail="Invalid tokens received")
+            raise AmoCRMServiceError("Invalid tokens received")
 
         return tokens["access_token"]

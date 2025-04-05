@@ -8,11 +8,33 @@ async def prepare_merge_data(
     all_contacts = [main_contact] + duplicates
     payload = {
         "id[]": [c["id"] for c in all_contacts],
-        "result_element[NAME]": main_contact.get("name", ""),
         "result_element[ID]": main_contact["id"],
     }
-    if responsible := main_contact.get("responsible_user_id"):
-        payload["result_element[MAIN_USER_ID]"] = responsible
+
+    # Обработка стандартных полей с учетом приоритета
+    standard_fields_map = {
+        "name": "NAME",
+        "responsible_user_id": "MAIN_USER_ID",
+        "created_at": "DATE_CREATE",
+        "price": "PRICE",
+    }
+
+    priority_field_names = {pf["field_name"] for pf in priority_fields}
+    youngest = duplicates[-1] if duplicates else None
+
+    for field, amo_key in standard_fields_map.items():
+        value = None
+        if (
+            field in priority_field_names
+            and youngest
+            and youngest.get(field) is not None
+        ):
+            value = youngest.get(field)
+        elif main_contact.get(field) is not None:
+            value = main_contact.get(field)
+
+        if value is not None:
+            payload[f"result_element[{amo_key}]"] = value
 
     payload.update(_merge_tags(all_contacts))
     custom_fields = _merge_custom_fields(main_contact, duplicates, priority_fields)
@@ -38,14 +60,16 @@ def _merge_custom_fields(
 ) -> dict[int, any]:
     """Объединяет кастомные поля с учетом приоритетов и уникальности телефонов."""
     fields = extract_custom_fields(main_contact)
-    if duplicates and priority_fields:
+
+    # Преобразуем в множество имён полей, которые нужно заменять
+    priority_field_names = {pf["field_name"] for pf in priority_fields}
+
+    # Берем из младшего дубля нужные приоритетные поля
+    if duplicates:
         newest = duplicates[-1]
         for field_id, value in extract_custom_fields(newest).items():
             field_name = get_field_name_by_id(main_contact, field_id) or ""
-            if any(
-                pf["field_name"] == field_name and pf.get("action")
-                for pf in priority_fields
-            ):
+            if field_name in priority_field_names:
                 fields[field_id] = value
 
     for dup in duplicates:

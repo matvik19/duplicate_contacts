@@ -35,11 +35,11 @@ class RMQManager:
 
             # Определяем мёртвые очереди для каждой основной очереди
             dead_letter_queues = {
-                "merge_duplicates_all_contacts": "dead_letter_merge_duplicates_all_contacts",
-                "save_contact_duplicates_settings": "dead_letter_save_contact_duplicates_settings",
-                "merge_duplicates_single_contact": "dead_letter_merge_duplicates_single_contact",
-                "add_contact_in_exclusion_consumer": "dead_letter_add_contact_in_exclusion_consumer",
-                "get_contact_duplicates_settings": "dead_letter_get_contact_duplicates_settings",
+                "duplicate_contacts_merge_all": "dead_letter_merge_duplicates_all_contacts",
+                "duplicate_contacts_save_settings": "dead_letter_duplicate_contacts_save_settings",
+                "duplicate_contacts_merge_single": "dead_letter_duplicate_contacts_merge_single",
+                "duplicate_contacts_add_in_exclusion": "dead_letter_duplicate_contacts_add_in_exclusion",
+                "duplicate_contacts_get_settings": "dead_letter_duplicate_contacts_get_settings",
             }
 
             # Создаем и связываем DLX

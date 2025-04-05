@@ -16,22 +16,24 @@ class DuplicateFinderService:
         self,
         subdomain: str,
         access_token: str,
-        contact_id: int,
+        target_contact_id: int,
         blocks: list[dict],
         merge_all: bool = True,
     ) -> dict[str, any] | None:
         """Находит дубли для одного контакта."""
-        main_contact = await self.amocrm_service.get_contact_by_id(
-            subdomain, access_token, contact_id
+        target_contact = await self.amocrm_service.get_contact_by_id(
+            subdomain, access_token, target_contact_id
         )
-        if not main_contact or (not merge_all and not self._is_recent(main_contact)):
-            logger.info(f"Контакт {contact_id} не найден или старше 24 часов.")
+        if not target_contact or (
+            not merge_all and not self._is_recent(target_contact)
+        ):
+            logger.info(f"Контакт {target_contact_id} не найден или старше 24 часов.")
             return None
 
         candidates = await self._get_candidates(
-            subdomain, access_token, contact_id, merge_all
+            subdomain, access_token, target_contact_id, merge_all
         )
-        return await self._find_matching_group(main_contact, candidates, blocks)
+        return await self._find_matching_group(target_contact, candidates, blocks)
 
     async def find_duplicates_all_contacts(
         self,
@@ -47,7 +49,7 @@ class DuplicateFinderService:
             return []
 
         if not merge_all:
-            contacts = [c for c in contacts if self._is_recent(c)]
+            contacts = [contact for contact in contacts if self._is_recent(contact)]
 
         return [
             {
@@ -63,13 +65,15 @@ class DuplicateFinderService:
     ) -> list[dict]:
         """Получает список кандидатов на дубли."""
         contacts = await self.amocrm_service.get_all_contacts(subdomain, access_token)
-        candidates = [c for c in contacts if c["id"] != contact_id]
+        candidates = [contact for contact in contacts if contact["id"] != contact_id]
         return (
-            candidates if merge_all else [c for c in candidates if self._is_recent(c)]
+            candidates
+            if merge_all
+            else [candidate for candidate in candidates if self._is_recent(candidate)]
         )
 
     async def _find_matching_group(
-        self, main_contact: dict, candidates: list[dict], blocks: list[dict]
+        self, target_contact: dict, candidates: list[dict], blocks: list[dict]
     ) -> dict | None:
         """Ищет первую подходящую группу дублей."""
         for block in blocks:
@@ -77,18 +81,18 @@ class DuplicateFinderService:
             if not fields:
                 continue
 
-            main_values = self._extract_values(main_contact, fields)
+            main_values = self._extract_values(target_contact, fields)
             if not main_values:
                 continue
 
             duplicates = [
-                c
-                for c in candidates
-                if self._is_duplicate(c, main_values, fields, exclusions)
+                candidate
+                for candidate in candidates
+                if self._is_duplicate(candidate, main_values, fields, exclusions)
             ]
             if duplicates:
                 group = {
-                    main_contact["id"]: main_contact,
+                    target_contact["id"]: target_contact,
                     **{c["id"]: c for c in duplicates},
                 }
                 return {
@@ -136,7 +140,7 @@ class DuplicateFinderService:
         candidate_values = self._extract_values(candidate, fields)
         return (
             candidate_values
-            and all(candidate_values[f] == main_values[f] for f in fields)
+            and all(candidate_values[field] == main_values[field] for field in fields)
             and not self._has_exclusion(candidate, exclusions, fields)
         )
 

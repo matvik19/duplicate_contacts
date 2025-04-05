@@ -65,7 +65,7 @@ class ContactDuplicateRepository:
         return result.scalar_one()
 
     async def insert_priority_fields(
-        self, session: AsyncSession, settings_id: int, fields: list[dict]
+        self, session: AsyncSession, settings_id: int, fields: list
     ) -> None:
         """Вставляет записи в `priority_fields`."""
         if not fields:
@@ -75,7 +75,6 @@ class ContactDuplicateRepository:
             [
                 {
                     "field_name": field["field_name"],
-                    "action": field["action"],
                     "settings_id": settings_id,
                 }
                 for field in fields

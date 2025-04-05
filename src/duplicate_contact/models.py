@@ -36,7 +36,6 @@ class PriorityField(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, nullable=False)
     field_name: Mapped[str] = mapped_column(sa.String(128), nullable=False)
-    action: Mapped[bool] = mapped_column(sa.Boolean, default=False, nullable=False)
 
     settings_id: Mapped[int] = mapped_column(
         sa.ForeignKey("settings.id", ondelete="CASCADE"), nullable=False

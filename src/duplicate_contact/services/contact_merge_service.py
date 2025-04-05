@@ -67,7 +67,7 @@ class ContactMergeService(ContactService):
         group = await self.find_duplicate_service.find_duplicates_single_contact(
             subdomain=settings.subdomain,
             access_token=access_token,
-            contact_id=contact_id,
+            target_contact_id=contact_id,
             blocks=settings.keys,
             merge_all=settings.merge_all,
         )

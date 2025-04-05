@@ -1,8 +1,7 @@
-import json
-
 from loguru import logger
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from src.common.exceptions import AmoCRMServiceError
 from src.common.token_service import TokenService
 from src.duplicate_contact.services.exclusion import ContactExclusionService
 from src.rabbitmq.consumers.base_consumer import BaseConsumer
@@ -42,7 +41,9 @@ class ExclusionConsumer(BaseConsumer):
                 log.info("Исключения добавлены: {}", result.get("added_exclusions"))
             else:
                 log.warning("Контакт не добавлен в исключения: {}", result)
-
+        except AmoCRMServiceError as e:
+            log.error("Ошибка получения токена: {}", e)
+            raise
         except Exception:
             log.exception("Ошибка при добавлении исключений для контакта")
             raise
