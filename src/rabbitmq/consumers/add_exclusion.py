@@ -26,19 +26,23 @@ class ExclusionConsumer(BaseConsumer):
 
     async def handle_message(self, data: dict, session: AsyncSession):
         """Обрабатывает сообщение с дублями контактов."""
+        subdomain = data["subdomain"]
+        contact_id = data["contact_id"]
+        log = logger.bind(
+            queue=self.queue_name, subdomain=subdomain, contact_id=contact_id
+        )
         try:
-            logger.info(
-                f"Получены настройки на дубли контактов: {json.dumps(data, indent=2)}"
-            )
-            subdomain = data["subdomain"]
-            contact_id = int(data["contact_id"])
+            log.info("Обработка исключений для контакта.")
             access_token = await self.token_service.get_tokens(data["subdomain"])
 
-            await self.exclusion_service.add_contact_to_exclusion(
+            result = await self.exclusion_service.add_contact_to_exclusion(
                 session, subdomain, contact_id, access_token
             )
+            if result.get("success"):
+                log.info("Исключения добавлены: {}", result.get("added_exclusions"))
+            else:
+                log.warning("Контакт не добавлен в исключения: {}", result)
 
-            logger.info("✅ Дубли контактов успешно обработаны.")
-        except Exception as e:
-            logger.error(f"❌ Ошибка обработки дублей контактов: {e}")
+        except Exception:
+            log.exception("Ошибка при добавлении исключений для контакта")
             raise

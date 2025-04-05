@@ -26,25 +26,20 @@ class GetSettingsConsumer(BaseConsumer):
     async def handle_message(self, data: dict, session: AsyncSession):
         """Обрабатывает сообщение с дублями контактов."""
         subdomain = data["subdomain"]
-        reply_to = data["reply_to"]
-        correlation_id = data["correlation_id"]
+        log = logger.bind(queue=self.queue_name, subdomain=subdomain)
 
         try:
+            log.info("Получение настроек дублей для subdomain={}", subdomain)
+
             settings = await self.duplicate_settings_service.get_duplicate_settings(
                 session, subdomain
             )
-            logger.info(
-                f"Получены настройки на дубли контактов: {json.dumps(data, indent=2)}"
-            )
 
-            # Если получен параметр reply_to, отправляем ответ
-            if reply_to:
-                # Отправляем настройки обратно в очередь
+            if data["reply_to"]:
                 await self.rmq_publisher.send_response(
-                    json.dumps(settings), reply_to, correlation_id
+                    json.dumps(settings), data["reply_to"], data["correlation_id"]
                 )
-                logger.info(f"Ответ отправлен в очередь {reply_to}.")
-            logger.info("Отдали настройки")
-        except Exception as e:
-            logger.error(f"❌ Ошибка при возврате настроек для {subdomain}: {e}")
+                log.info("📤 Настройки отправлены в очередь {}", data["reply_to"])
+        except Exception:
+            log.exception("❌ Ошибка при получении или отправке настроек дублей")
             raise

@@ -30,31 +30,28 @@ class MergeAllContactsConsumer(BaseConsumer):
 
     async def handle_message(self, data: dict, session: AsyncSession):
         """Обрабатывает сообщение с дублями контактов."""
+        subdomain = data.get("subdomain")
+        log = logger.bind(queue=self.queue_name, subdomain=subdomain)
+
         try:
-            subdomain = data["subdomain"]
-            access_token = await self.token_service.get_tokens(data["subdomain"])
-            duplicate_settings = (
-                await self.duplicate_settings_service.get_duplicate_settings(
-                    session, subdomain
-                )
+            log.info("📥 Обработка объединения всех дублей для {}", subdomain)
+            access_token = await self.token_service.get_tokens(subdomain)
+            settings = await self.duplicate_settings_service.get_duplicate_settings(
+                session, subdomain
             )
-            print(f"{duplicate_settings=}")
-            if not duplicate_settings:
-                logger.info(f"Настройки дублей не найдены для subdomain: {subdomain}")
+
+            if not settings:
+                log.warning("Настройки дублей не найдены.")
                 return
 
-            if not duplicate_settings.merge_is_active:
-                logger.warning(
-                    f"Объединение контактов выключено в настройках для: {subdomain}"
-                )
+            if not settings.merge_is_active:
+                log.warning("Слияние отключено в настройках.")
                 return
 
-            # ✅ Теперь просто вызываем сервис дублей
             await self.duplicate_service.merge_all_contacts(
-                duplicate_settings, access_token, session
+                settings, access_token, session
             )
-
-            logger.info("✅ Дубли контактов успешно обработаны.")
-        except Exception as e:
-            logger.error(f"❌ Ошибка обработки дублей контактов: {e}")
+            log.info("Объединение всех дублей завершено.")
+        except Exception:
+            log.exception("Ошибка при объединении всех дублей контактов")
             raise

@@ -25,18 +25,18 @@ class SaveSettingsConsumer(BaseConsumer):
 
     async def handle_message(self, data: dict, session: AsyncSession):
         """Обрабатывает сообщение с дублями контактов."""
-        try:
-            logger.info(
-                f"Получены настройки на дубли контактов: {json.dumps(data, indent=2)}"
-            )
+        subdomain = data.get("subdomain")
+        log = logger.bind(queue=self.queue_name, subdomain=subdomain)
 
+        try:
+            log.info("Сохранение настроек дублей")
             settings_data = ContactDuplicateSettingsSchema(**data)
 
             await self.duplicate_settings_service.add_duplicate_settings(
                 session, settings_data
             )
+            log.info("Настройки дублей сохранены.")
 
-            logger.info("✅ Дубли контактов успешно обработаны.")
-        except Exception as e:
-            logger.error(f"❌ Ошибка обработки дублей контактов: {e}")
+        except Exception:
+            log.exception("Ошибка при сохранении настроек дублей")
             raise

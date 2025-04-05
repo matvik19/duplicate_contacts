@@ -30,16 +30,21 @@ class ContactMergeService(ContactService):
         session: AsyncSession,
     ) -> list[dict[str, any]]:
         """Объединяет все группы дублей контактов."""
+        log = logger.bind(subdomain=settings.subdomain)
         groups = await self.find_duplicate_service.find_duplicates_all_contacts(
             subdomain=settings.subdomain,
             access_token=access_token,
             blocks=settings.keys,
             merge_all=settings.merge_all,
         )
-        logger.info(f"Найдено групп дублей: {len(groups)}")
         if not groups:
-            logger.info("Дубли не найдены.")
+            log.info("Дубли не найдены для объединения.")
             return []
+
+        log.info("🔗 Найдено {} групп дублей.", len(groups))
+        for i, group in enumerate(groups, 1):
+            contact_ids = [c["id"] for c in group.get("group", [])]
+            log.debug("Группа {}: {} контактов → {}", i, len(contact_ids), contact_ids)
 
         return [
             result
@@ -57,6 +62,8 @@ class ContactMergeService(ContactService):
         session: AsyncSession,
     ) -> dict[str, any]:
         """Объединяет дубли для одного контакта."""
+        log = logger.bind(subdomain=settings.subdomain, contact_id=contact_id)
+
         group = await self.find_duplicate_service.find_duplicates_single_contact(
             subdomain=settings.subdomain,
             access_token=access_token,
@@ -64,11 +71,24 @@ class ContactMergeService(ContactService):
             blocks=settings.keys,
             merge_all=settings.merge_all,
         )
+
         if not group or len(group.get("group", [])) < 2:
-            logger.info(f"Дубли не найдены для контакта {contact_id}.")
+            log.info("Дубли не найдены для одного контакта.")
             return {}
 
+        contact_ids = [c["id"] for c in group.get("group", [])]
+        log.info(
+            "Найдена группа для объединения: {} контактов → {}",
+            len(contact_ids),
+            contact_ids,
+        )
+
         result = await self._merge_contact_group(group, settings, access_token, session)
+
+        if result:
+            log.info("Контакты объединены успешно.")
+        else:
+            log.warning("Объединение не выполнено.")
         return result or {}
 
     async def _process_groups(

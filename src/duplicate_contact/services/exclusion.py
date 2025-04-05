@@ -46,7 +46,7 @@ class ContactExclusionService(ContactService):
         logger.info(
             f"Для контакта {contact_id} добавлены исключения: {added_exclusions}"
         )
-        return {"success": True, "added_exclusions": added_exclusions}
+        return {"status": "success", "added_exclusions": added_exclusions}
 
     async def _add_exclusions(
         self, session: AsyncSession, contact: dict[str, any], fields: list[any]

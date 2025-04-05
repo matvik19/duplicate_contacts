@@ -30,31 +30,31 @@ class MergeSingleContactConsumer(BaseConsumer):
 
     async def handle_message(self, data: dict, session: AsyncSession):
         """Обрабатывает сообщение с дублями контактов."""
+        subdomain = data.get("subdomain")
+        contact_id = data.get("contact_id")
+        log = logger.bind(
+            queue=self.queue_name, subdomain=subdomain, contact_id=contact_id
+        )
+
         try:
-            subdomain = data["subdomain"]
-            contact_id = data["contact_id"]
-            access_token = await self.token_service.get_tokens(data["subdomain"])
-            duplicate_settings = (
-                await self.duplicate_settings_service.get_duplicate_settings(
-                    session, subdomain
-                )
+            log.info("Обработка дублей для одного контакта.")
+            access_token = await self.token_service.get_tokens(subdomain)
+            settings = await self.duplicate_settings_service.get_duplicate_settings(
+                session, subdomain
             )
-            if not duplicate_settings:
-                logger.info(f"Настройки дублей не найдены для subdomain: {subdomain}")
+
+            if not settings:
+                log.warning("Настройки дублей не найдены.")
                 return
 
-            if not duplicate_settings.merge_is_active:
-                logger.warning(
-                    f"Объединение контактов выключено в настройках для: {subdomain}"
-                )
+            if not settings.merge_is_active:
+                log.warning("Слияние отключено в настройках.")
                 return
 
-            # ✅ Теперь просто вызываем сервис дублей
             await self.duplicate_service.merge_single_contact(
-                duplicate_settings, access_token, contact_id, session
+                settings, access_token, contact_id, session
             )
-
-            logger.info("✅ Дубли контакта успешно обработаны.")
-        except Exception as e:
-            logger.error(f"❌ Ошибка обработки дублей контактов: {e}")
+            log.info("✅ Контакт успешно объединён.")
+        except Exception:
+            log.exception("Ошибка при объединении дубля одного контакта")
             raise

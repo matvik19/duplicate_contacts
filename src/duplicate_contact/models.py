@@ -125,8 +125,8 @@ class MergeBlockLog(Base):
     block_id: Mapped[int] = mapped_column(
         sa.ForeignKey("blocks.id", ondelete="CASCADE"), nullable=False
     )
-    contact_id: Mapped[int] = mapped_column(
-        sa.Integer, nullable=False
+    contact_id: Mapped[str] = mapped_column(
+        sa.String(256), nullable=False
     )  # Итоговый контакт после склейки
     created_at: Mapped[datetime] = mapped_column(
         sa.DateTime(timezone=True), server_default=func.now(), nullable=False
