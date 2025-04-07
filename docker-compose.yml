@@ -1,0 +1,22 @@
+services:
+  app:
+    build:
+      context: .
+    container_name: duplicate_contact_service
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "127.0.0.1:3003:8000"
+    networks:
+      - duplicate_contact_network
+      - postgres_network
+      - rabbitmq_rabbit-net
+
+networks:
+  duplicate_leads_network:
+    name: duplicate_contact_network
+  postgres_network:
+    external: true
+  rabbitmq_rabbit-net:
+    external: true
