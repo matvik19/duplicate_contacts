@@ -5,6 +5,14 @@ from abc import ABC, abstractmethod
 from loguru import logger
 
 from src.common.database import DatabaseManager
+from src.common.exceptions import (
+    ValidationError,
+    SettingsNotFoundError,
+    ProcessingError,
+    NetworkError,
+    TokenError,
+    AmoCRMServiceError,
+)
 from src.rabbitmq.connection import RMQConnectionManager
 from src.rabbitmq.publisher import RMQPublisher
 
@@ -44,32 +52,41 @@ class BaseConsumer(ABC):
                 await asyncio.sleep(10)
 
     async def process_message(self, message: aio_pika.IncomingMessage):
-        """Обрабатывает сообщение"""
         retry_count = message.headers.get("x-retry", 0)
+        log = logger.bind(queue=self.queue_name)
         try:
             body = message.body.decode("utf-8")
             data = json.loads(body)
-            logger.info(f"[{self.queue_name}] Получено сообщение: {data}")
+            log = log.bind(subdomain=data.get("subdomain"))
+            log.info(f"Получено сообщение: {data}")
 
             async with self.db_manager.get_session() as session:
                 async with session.begin():
                     await self.handle_message(data, session)
 
             await message.ack()
-        except json.JSONDecodeError:
-            logger.error("Ошибка: Некорректный JSON в сообщении")
+            log.debug("Сообщение успешно обработано")
+        except json.JSONDecodeError as e:
+            log.error(f"Некорректный JSON: {e}")
             await message.reject(requeue=False)
-        except Exception as e:
-            logger.error(f"Ошибка обработки сообщения: {e}")
+        except (NetworkError, TokenError) as e:
+            log.error(f"Ошибка с retry: {e}")
             if retry_count >= MAX_RETRIES:
-                logger.error("Достигнут лимит повторных попыток. Отправляем в DLX.")
+                log.error("Лимит повторов исчерпан, отправка в DLX")
                 await message.reject(requeue=False)
             else:
-                logger.warning(
-                    f"Попытка обработки не удалась. Републикация №{retry_count + 1}"
-                )
+                log.warning(f"Повторная попытка #{retry_count + 1}")
                 await self.rmq_publisher.republish_message(message, retry_count + 1)
                 await message.ack()
+        except AmoCRMServiceError as e:
+            log.error("Ошибка API amoCRM: {}", e)
+            await message.reject(requeue=False)
+        except (ValidationError, SettingsNotFoundError, ProcessingError) as e:
+            log.error(f"Логическая ошибка: {e}")
+            await message.reject(requeue=False)
+        except Exception as e:
+            log.exception(f"Неизвестная ошибка: {e}")
+            await message.reject(requeue=False)
 
     @abstractmethod
     async def handle_message(self, data: dict, session):

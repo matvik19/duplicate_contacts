@@ -1,6 +1,8 @@
 import aio_pika
 from loguru import logger
 
+from src.common.exceptions import NetworkError
+
 
 class RMQConnectionManager:
     """Класс для управления соединением с RabbitMQ."""
@@ -18,8 +20,7 @@ class RMQConnectionManager:
                 )
                 logger.info("Подключение к RabbitMQ успешно установлено.")
             except Exception as e:
-                logger.error(f"Ошибка подключения к RabbitMQ: {e}")
-                raise
+                raise NetworkError(f"Ошибка подключения к RabbitMQ. Error: {e}")
         return self.connection
 
     async def close(self):

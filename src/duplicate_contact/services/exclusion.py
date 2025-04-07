@@ -43,9 +43,7 @@ class ContactExclusionService(ContactService):
 
         added_exclusions = await self._add_exclusions(session, contact, block.fields)
         await session.commit()
-        logger.info(
-            f"Для контакта {contact_id} добавлены исключения: {added_exclusions}"
-        )
+
         return {"status": "success", "added_exclusions": added_exclusions}
 
     async def _add_exclusions(

@@ -3,8 +3,8 @@ import asyncio
 import aiohttp
 from aiohttp import ClientSession
 from loguru import logger
-from fastapi import HTTPException
-from typing import Dict, Any, List
+
+from src.common.exceptions import NetworkError, AmoCRMServiceError
 
 
 class AmocrmService:
@@ -15,8 +15,8 @@ class AmocrmService:
 
     async def request(
         self, method: str, subdomain: str, access_token: str, endpoint: str, **kwargs
-    ) -> Any:
-        """Обобщённый метод для работы с API."""
+    ) -> any:
+        log = logger.bind(subdomain=subdomain, endpoint=endpoint)
         base_url = f"https://{subdomain}.amocrm.ru"
         url = f"{base_url}{endpoint}"
         headers = {
@@ -25,28 +25,34 @@ class AmocrmService:
             "Authorization": f"Bearer {access_token}",
         }
 
-        async with self.client_session.request(
-            method, url, headers=headers, **kwargs
-        ) as response:
-            if response.status in [200, 201, 202]:
-                return await response.json()
-            elif response.status == 204:
-                logger.warning(f"No content (204) for {url}.")
-                return []
-            else:
-                error_message = await response.text()
-                logger.error(f"Error {response.status} for {url}: {error_message}")
-                raise HTTPException(status_code=response.status, detail=error_message)
+        try:
+            async with self.client_session.request(
+                method, url, headers=headers, **kwargs
+            ) as response:
+                if response.status in [200, 201, 202]:
+                    log.debug(f"Успешный запрос: {method} {url}")
+                    return await response.json()
+                elif response.status == 204:
+                    log.warning(f"Нет данных (204) для {url}")
+                    return []
+                else:
+                    error_message = await response.text()
+                    log.error(f"Ошибка {response.status} для {url}: {error_message}")
+                    raise AmoCRMServiceError(
+                        f"Ошибка API: {response.status} - {error_message}"
+                    )
+        except aiohttp.ClientError as e:
+            log.error(f"Сетевая ошибка при запросе {url}: {e}")
+            raise NetworkError(f"Сетевая ошибка: {e}")
 
     async def get_all_contacts(
         self, subdomain: str, access_token: str
-    ) -> List[Dict[str, Any]]:
-        """Получает все контакты асинхронно, отправляя несколько запросов сразу."""
+    ) -> list[dict[str, any]]:
+        log = logger.bind(subdomain=subdomain)
         all_contacts = []
         limit = 250
         page = 1
 
-        # Сначала запрашиваем первую страницу, чтобы узнать общее число контактов
         first_response = await self.request(
             "GET",
             subdomain,
@@ -57,15 +63,13 @@ class AmocrmService:
         contacts = first_response.get("_embedded", {}).get("contacts", [])
         all_contacts.extend(contacts)
 
-        # Вычисляем, сколько всего страниц
         total_items = first_response.get("_total_items", 0)
         total_pages = (total_items // limit) + (1 if total_items % limit > 0 else 0)
 
-        # Если контактов меньше 250, выходим
         if total_pages <= 1:
+            log.info(f"Получено {len(all_contacts)} контактов на 1 странице")
             return all_contacts
 
-        # Запускаем параллельно запросы ко всем оставшимся страницам
         tasks = [
             self.request(
                 "GET",
@@ -77,17 +81,16 @@ class AmocrmService:
             for p in range(2, total_pages + 1)
         ]
         responses = await asyncio.gather(*tasks)
-
-        # Добавляем все полученные контакты
         for response in responses:
             contacts = response.get("_embedded", {}).get("contacts", [])
             all_contacts.extend(contacts)
 
+        log.info(f"Всего получено {len(all_contacts)} контактов")
         return all_contacts
 
     async def get_contact_by_id(
         self, subdomain: str, access_token: str, contact_id: int
-    ) -> Dict[str, Any]:
+    ) -> dict[str, any]:
         """Получает информацию о контакте по его ID."""
         return await self.request(
             "GET", subdomain, access_token, f"/api/v4/contacts/{contact_id}"
@@ -98,9 +101,9 @@ class AmocrmService:
         subdomain: str,
         access_token: str,
         pipeline_id: int,
-        statuses_ids: List[int] = None,
+        statuses_ids: list[int] = None,
         responsible_user_id: int = None,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, any]]:
         """Получение сделок по фильтру."""
         params = {"filter[pipeline_id]": pipeline_id}
         if statuses_ids:
@@ -115,7 +118,7 @@ class AmocrmService:
 
     async def get_lead_by_id(
         self, subdomain: str, access_token: str, lead_id: int
-    ) -> Dict[str, Any]:
+    ) -> dict[str, any]:
         """Получение сделки по ID."""
         return await self.request(
             "GET", subdomain, access_token, f"/api/v4/leads/{lead_id}?with=contacts"
@@ -126,8 +129,8 @@ class AmocrmService:
         subdomain: str,
         access_token: str,
         lead_id: int,
-        all_tags: List[Dict[str, Any]] = None,
-    ) -> Dict:
+        all_tags: list[dict[str, any]] = None,
+    ) -> dict:
         """Добавление тега 'merged' к сделке."""
         if all_tags:
             all_tags.append({"name": "merged"})
@@ -146,18 +149,9 @@ class AmocrmService:
         )
 
     async def merge_contacts(
-        self,
-        subdomain: str,
-        access_token: str,
-        result_element: dict,
-    ) -> Dict[str, Any]:
-        """
-        Отправляет запрос на объединение контактов через API amoCRM.
-        :param subdomain: поддомен amoCRM.
-        :param access_token: access token для авторизации.
-        :param result_element: тело запроса, сформированное методом prepare_merge_data.
-        :return: ответ API в виде словаря.
-        """
+        self, subdomain: str, access_token: str, result_element: dict
+    ) -> dict[str, any]:
+        log = logger.bind(subdomain=subdomain)
         url = f"https://{subdomain}.amocrm.ru/ajax/merge/contacts/save"
         headers = {
             "Host": f"{subdomain}.amocrm.ru",
@@ -172,24 +166,16 @@ class AmocrmService:
             ) as response:
                 if response.status != 202:
                     error_message = await response.text()
-                    raise HTTPException(
-                        status_code=response.status,
-                        detail=f"Failed to merge contacts: {error_message}",
+                    log.error(
+                        f"Ошибка слияния контактов: {response.status} - {error_message}"
                     )
+                    raise AmoCRMServiceError(f"Ошибка слияния: {error_message}")
                 result = await response.json()
+                log.info(f"Контакты успешно объединены: {result_element['id[]']}")
                 return result
-        except aiohttp.ClientError as client_err:
-            logger.error(f"Network error during merging contacts: {client_err}")
-            raise HTTPException(
-                status_code=502,
-                detail=f"Network error during merging contacts: {client_err}",
-            )
-        except Exception as e:
-            logger.error(f"Unexpected error during merging contacts: {e}")
-            raise HTTPException(
-                status_code=500,
-                detail=f"Unexpected error during merging contacts: {e}",
-            )
+        except aiohttp.ClientError as e:
+            log.error(f"Сетевая ошибка при слиянии: {e}")
+            raise NetworkError(f"Сетевая ошибка: {e}")
 
     async def add_tag_merged_to_contact(
         self,
