@@ -84,7 +84,7 @@ class BaseConsumer(ABC):
         except (ValidationError, SettingsNotFoundError, ProcessingError) as e:
             log.error(f"Логическая ошибка: {e}")
             await message.reject(requeue=False)
-        except Exception as e:
+        except ProcessingError as e:
             log.exception(f"Неизвестная ошибка: {e}")
             await message.reject(requeue=False)
 
